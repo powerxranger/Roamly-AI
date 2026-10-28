@@ -144,9 +144,9 @@ def _generate_concierge_fallback(query: str) -> str:
 
 
 def run_travel_agent(user_input: str, thread_id: str | None = None) -> dict:
-    # Check everything up front so the caller learns about every missing key
-    # at once, rather than one per failed attempt.
-    require("GROQ_API_KEY", "DATABASE_URL")
+    # GROQ_API_KEY is required to power the agents.
+    # DATABASE_URL is optional (falls back to in-memory checkpointer if unset).
+    require("GROQ_API_KEY")
 
     if not thread_id:
         thread_id = f"user_{uuid.uuid4().hex}"

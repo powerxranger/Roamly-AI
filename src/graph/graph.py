@@ -40,9 +40,9 @@ def build_graph() -> StateGraph:
 
 @lru_cache(maxsize=4)
 def _compiled_graph(database_url: str):
-    return build_graph().compile(checkpointer=get_checkpointer(database_url))
+    return build_graph().compile(checkpointer=get_checkpointer(database_url or None))
 
 
 def get_travel_graph():
-    require("DATABASE_URL")
-    return _compiled_graph(resolve_database_url())
+    url = resolve_database_url()
+    return _compiled_graph(url or "")

@@ -97,8 +97,8 @@ CREDENTIAL_LABELS = {
         "placeholder": "gsk_...",
     },
     "DATABASE_URL": {
-        "label": "PostgreSQL URL",
-        "hint": "Stores LangGraph conversation checkpoints.",
+        "label": "PostgreSQL URL (Optional)",
+        "hint": "Optional: Stores checkpoints across server restarts (defaults to in-memory).",
         "placeholder": "postgresql://user:password@host:5432/dbname",
     },
 }
@@ -134,7 +134,9 @@ def credential_status() -> dict:
         for name, source in sources.items()
     }
 
-    missing = [name for name, source in sources.items() if source is None]
+    # Only GROQ_API_KEY is mandatory for the app to be operational.
+    # DATABASE_URL is optional (the system falls back to in-memory checkpointer).
+    missing = ["GROQ_API_KEY"] if sources["GROQ_API_KEY"] is None else []
 
     return {
         "ready": not missing,
