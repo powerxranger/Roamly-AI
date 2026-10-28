@@ -1,6 +1,6 @@
-# TravelBrain AI — Autonomous Multi-Agent Travel Planner
+# Roamly AI — Autonomous Multi-Agent Travel Planner
 
-TravelBrain AI is a full-featured, commercial-grade travel planning platform powered by an autonomous multi-agent system built on **LangGraph**, **FastAPI**, and **Groq**. Describe any trip in conversational natural language, and a coordinated team of AI agents researches live flight routes, accommodations, weather conditions, packing recommendations, budget breakdowns, and daily itineraries into an actionable travel plan.
+Roamly AI is a full-featured, commercial-grade travel planning platform powered by an autonomous multi-agent system built on **LangGraph**, **FastAPI**, and **Groq**. Describe any trip in conversational natural language, and a coordinated team of AI agents researches live flight routes, accommodations, weather conditions, packing recommendations, budget breakdowns, and daily itineraries into an actionable travel plan.
 
 ---
 
@@ -61,7 +61,8 @@ User Query ──► [Flight Agent] ──► [Hotel Agent] ──► [Weather A
 1. **Clone or navigate to the repository**:
 
    ```bash
-   cd TravelBrain-Multi-Agent-AI-Travel-Planner-Enhanced
+   git clone https://github.com/powerxranger/Roamly-AI.git
+   cd Roamly-AI
    ```
 
 2. **Install dependencies with uv**:

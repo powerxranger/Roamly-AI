@@ -1,5 +1,5 @@
 /* ============================================================
-   TravelBrain AI — design tokens
+   Roamly AI — design tokens
    ============================================================ */
 
 :root {
@@ -1281,7 +1281,57 @@ svg { width: 1em; height: 1em; display: block; }
   font-size: 13.5px;
   color: var(--text-soft);
   line-height: 1.7;
-  white-space: pre-wrap;
+}
+
+.itinerary-timeline-block-text p {
+  margin: 0 0 6px;
+}
+
+.itinerary-timeline-block-text p:last-child {
+  margin-bottom: 0;
+}
+
+.itinerary-timeline-block-text ul,
+.itinerary-timeline-block-text ol {
+  margin: 4px 0 6px;
+  padding-left: 20px;
+}
+
+.itinerary-timeline-block-text li {
+  margin-bottom: 3px;
+}
+
+.itinerary-timeline-block-text strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.itinerary-timeline-block-text em {
+  font-style: italic;
+  color: var(--text);
+}
+
+.itinerary-timeline-block-text code {
+  font-size: 12px;
+  padding: 1px 4px;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+}
+
+.packing-item span strong {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.packing-group-head strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.itinerary-timeline-day-label strong {
+  color: #fff;
+  font-weight: 700;
 }
 
 .itinerary-timeline-block-text:empty::before {

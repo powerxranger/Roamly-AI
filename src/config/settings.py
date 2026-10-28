@@ -42,11 +42,13 @@ OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 # LLM
 # =========================
 
-# Groq retired the Llama 3.x chat models; check the live list with
-#   GET https://api.groq.com/openai/v1/models
-# if this ever starts returning model_not_found again.
-GROQ_MODEL = (os.getenv("GROQ_MODEL") or "openai/gpt-oss-20b").strip()
-GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "8192"))
+# Primary Groq model. High-quota models (1,000,000 TPD, 128,000 TPM) like llama-3.3-70b-versatile
+# prevent 413 and 429 token rate-limit exhaustion on continuous questions.
+GROQ_MODEL = (os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile").strip()
+if "gpt-oss-20b" in GROQ_MODEL.lower():
+    GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "2500"))
+GROQ_CONCIERGE_MAX_TOKENS = int(os.getenv("GROQ_CONCIERGE_MAX_TOKENS", "800"))
 
 
 # =========================

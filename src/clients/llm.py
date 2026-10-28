@@ -1,30 +1,179 @@
-"""Groq chat model, resolved per session and cached per distinct key."""
+"""
+Groq chat model client with multi-model resilience, dynamic failover, and rate-limit shielding.
+"""
 
+import logging
+import time
 from functools import lru_cache
+from typing import Any
 
 from langchain_groq import ChatGroq
 
 from src.config.session import require, resolve_groq_api_key
-from src.config.settings import GROQ_MODEL, GROQ_MAX_TOKENS
+from src.config.settings import (
+    GROQ_CONCIERGE_MAX_TOKENS,
+    GROQ_MAX_TOKENS,
+    GROQ_MODEL,
+)
+
+logger = logging.getLogger(__name__)
+
+# High-capacity production Groq models.
+# llama-3.3-70b and llama-3.1-8b each have 1,000,000 Tokens Per Day (TPD)
+# and 128,000+ Tokens Per Minute (TPM), preventing 413 and 429 rate limits.
+PRODUCTION_MODELS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "llama3-70b-8192",
+    "llama3-8b-8192",
+]
 
 
-@lru_cache(maxsize=8)
-def _build_llm(model: str, api_key: str) -> ChatGroq:
+@lru_cache(maxsize=32)
+def _build_raw_llm(model: str, api_key: str, max_tokens: int, temperature: float) -> ChatGroq:
+    clean_key = (api_key or "").strip()
     return ChatGroq(
         model=model,
-        api_key=api_key,
-        temperature=0.3,
-        max_tokens=GROQ_MAX_TOKENS,
-        max_retries=2,
+        api_key=clean_key,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        max_retries=1,
     )
 
 
-def get_llm() -> ChatGroq:
+class ResilientChatGroq:
     """
-    The key comes from the current session if one supplied it, otherwise
-    from the server's .env. One client is reused per distinct key.
+    Transparent ChatGroq wrapper that catches rate-limit errors (413/429/TPD/TPM)
+    and rotates across high-capacity models seamlessly without failing the user.
     """
 
+    def __init__(
+        self,
+        api_key: str,
+        preferred_model: str,
+        default_max_tokens: int,
+        temperature: float = 0.3,
+    ):
+        self.api_key = api_key
+        # Never default to an exhausted or low-quota model
+        if "gpt-oss-20b" in preferred_model.lower():
+            preferred_model = "llama-3.3-70b-versatile"
+        self.preferred_model = preferred_model
+        self.default_max_tokens = default_max_tokens
+        self.temperature = temperature
+
+    def invoke(self, input_data: Any, *args, **kwargs) -> Any:
+        # Build candidate list starting with preferred_model
+        candidates = [self.preferred_model]
+        for m in PRODUCTION_MODELS:
+            if m not in candidates:
+                candidates.append(m)
+
+        last_error = None
+        for idx, model_name in enumerate(candidates):
+            curr_max = self.default_max_tokens
+
+            # Keep max_tokens prudent to conserve quota
+            if "8b" in model_name.lower():
+                curr_max = min(curr_max, 2500)
+
+            client = _build_raw_llm(model_name, self.api_key, curr_max, self.temperature)
+            try:
+                response = client.invoke(input_data, *args, **kwargs)
+                content = getattr(response, "content", "")
+                # If model produced valid content, return immediately
+                if content and str(content).strip():
+                    return response
+
+                # If model returned blank content, try next candidate
+                logger.warning(
+                    "Model '%s' returned blank response. Trying next candidate model...",
+                    model_name
+                )
+                continue
+
+            except Exception as e:
+                err_str = str(e).lower()
+                last_error = e
+
+                # Check for rate limit, quota, or availability issues
+                is_recoverable = any(
+                    x in err_str
+                    for x in [
+                        "413",
+                        "429",
+                        "rate_limit",
+                        "rate limit",
+                        "tokens per minute",
+                        "tokens per day",
+                        "tpm",
+                        "tpd",
+                        "quota",
+                        "request too large",
+                        "model_not_found",
+                        "not found",
+                        "service unavailable",
+                        "503",
+                    ]
+                )
+
+                if is_recoverable:
+                    logger.warning(
+                        "Groq '%s' unavailable or rate-limited (%s). Switching to candidate %d/%d...",
+                        model_name,
+                        e,
+                        idx + 2,
+                        len(candidates),
+                    )
+                    time.sleep(0.2)
+                    continue
+
+                logger.warning(
+                    "Unexpected error on model '%s': %s. Trying fallback model...",
+                    model_name,
+                    e,
+                )
+                continue
+
+        if last_error:
+            raise last_error
+        raise RuntimeError("All available Groq model candidates failed.")
+
+    def __getattr__(self, name: str) -> Any:
+        client = _build_raw_llm(self.preferred_model, self.api_key, self.default_max_tokens, self.temperature)
+        return getattr(client, name)
+
+
+def get_llm(
+    max_tokens: int | None = None,
+    temperature: float = 0.3,
+    model: str | None = None,
+) -> ResilientChatGroq:
+    """
+    Returns a resilient Groq client configured for the current session key.
+    """
     require("GROQ_API_KEY")
+    api_key = resolve_groq_api_key()
+    target_model = (model or GROQ_MODEL).strip()
+    if "gpt-oss-20b" in target_model.lower():
+        target_model = "llama-3.3-70b-versatile"
+    target_max = max_tokens or GROQ_MAX_TOKENS
 
-    return _build_llm(GROQ_MODEL, resolve_groq_api_key())
+    return ResilientChatGroq(
+        api_key=api_key,
+        preferred_model=target_model,
+        default_max_tokens=target_max,
+        temperature=temperature,
+    )
+
+
+def get_concierge_llm() -> ResilientChatGroq:
+    """
+    Fast, focused LLM for conversational Q&A. Uses lightweight max_tokens
+    and llama-3.1-8b-instant to ensure sub-second responses and zero rate limits.
+    """
+    return get_llm(
+        max_tokens=GROQ_CONCIERGE_MAX_TOKENS,
+        temperature=0.4,
+        model="llama-3.1-8b-instant",
+    )

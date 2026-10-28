@@ -22,6 +22,9 @@
   function formatRun(text) {
     var out = escapeHtml(text);
 
+    // Convert LLM-generated <br> / <br/> into real HTML linebreaks safely
+    out = out.replace(/&lt;br\s*\/?&gt;/gi, "<br />");
+
     // links: [label](url) — only http(s), mailto and relative targets
     out = out.replace(/\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;[^)]*&quot;)?\)/g, function (m, label, url) {
       if (!/^(https?:\/\/|mailto:|\/|#)/i.test(url)) return m;
@@ -34,12 +37,12 @@
     });
 
     return out
-      .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
-      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-      .replace(/__([^_]+)__/g, "<strong>$1</strong>")
-      .replace(/~~([^~]+)~~/g, "<del>$1</del>")
-      .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
-      .replace(/(^|[^_\w])_([^_\n]+)_(?!_)/g, "$1<em>$2</em>");
+      .replace(/\*\*\*([\s\S]+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+      .replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/__([\s\S]+?)__/g, "<strong>$1</strong>")
+      .replace(/~~([\s\S]+?)~~/g, "<del>$1</del>")
+      .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\*)/g, "$1<em>$2</em>")
+      .replace(/(^|[^_\w])_([^_\n]+?)_(?!_)/g, "$1<em>$2</em>");
   }
 
   /* Splits on code spans so their contents are never reformatted. */
@@ -65,7 +68,7 @@
 
   /* ---------- helpers ---------- */
 
-  var BULLET = /^(\s*)([-*+])\s+(.*)$/;
+  var BULLET = /^(\s*)([-*+•–—])\s+(.*)$/;
   var ORDERED = /^(\s*)(\d+)[.)]\s+(.*)$/;
   var TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
 
@@ -100,6 +103,11 @@
         // an indented non-bullet line continues the current item
         if (stack.length && line.trim() && /^\s{2,}/.test(line)) {
           parts.push(" " + inline(line.trim()));
+          i++;
+          continue;
+        }
+        // loose list: blank line followed by another list item
+        if (stack.length && !line.trim() && i + 1 < lines.length && (BULLET.test(lines[i + 1]) || ORDERED.test(lines[i + 1]))) {
           i++;
           continue;
         }
@@ -147,7 +155,8 @@
 
     function flushPara() {
       if (!para.length) return;
-      html.push("<p>" + inline(para.join(" ")) + "</p>");
+      var rendered = inline(para.join("\n")).replace(/\n/g, "<br />");
+      html.push("<p>" + rendered + "</p>");
       para = [];
     }
 
@@ -250,5 +259,5 @@
     return html.join("\n");
   }
 
-  global.MD = { render: render, escape: escapeHtml };
+  global.MD = { render: render, inline: inline, escape: escapeHtml };
 })(window);

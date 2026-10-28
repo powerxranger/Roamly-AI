@@ -1,5 +1,5 @@
 /* ============================================================
-   TravelBrain AI — frontend
+   Roamly AI — frontend
    Talks to:  POST   /api/travel  { message, thread_id }
               GET    /api/config          credential status
               POST   /api/config          set session keys
@@ -540,7 +540,9 @@
       var card = el("article", "itinerary-timeline-card");
       var cHead = el("div", "itinerary-timeline-card-head");
       var cTitle = el("div", "itinerary-timeline-day");
-      cTitle.appendChild(el("span", "itinerary-timeline-day-label", dayLabel));
+      var lblSpan = el("span", "itinerary-timeline-day-label");
+      lblSpan.innerHTML = window.MD && window.MD.inline ? window.MD.inline(dayLabel) : dayLabel;
+      cTitle.appendChild(lblSpan);
       cTitle.appendChild(el("span", "itinerary-timeline-day-title", "Itinerary"));
       cTitle.appendChild(el("span", "itinerary-timeline-day-sub", "Suggested plan for this day"));
       cHead.appendChild(cTitle);
@@ -564,7 +566,7 @@
         bHead.appendChild(el("span", "itinerary-timeline-block-title", b.title));
         blk.appendChild(bHead);
         var bText = el("div", "itinerary-timeline-block-text");
-        bText.textContent = b.text;
+        bText.innerHTML = window.MD && window.MD.render ? window.MD.render(b.text) : b.text;
         blk.appendChild(bText);
         cBody.appendChild(blk);
       });
@@ -770,7 +772,8 @@
       var lines = group.split(/\r?\n/).map(function (l) { return l.replace(/^#+\s*/i, "").trim(); }).filter(Boolean);
       if (lines.length === 0) return;
       var g = el("div", "packing-group");
-      var gh = el("div", "packing-group-head", lines[0]);
+      var gh = el("div", "packing-group-head");
+      gh.innerHTML = window.MD && window.MD.inline ? window.MD.inline(lines[0]) : lines[0];
       g.appendChild(gh);
       var gb = el("div", "packing-group-body");
       lines.slice(1).forEach(function (line) {
@@ -783,7 +786,10 @@
           updateProgress();
         });
         item.appendChild(cb);
-        item.appendChild(el("span", null, line.replace(/^[-*•]\s*/i, "").replace(/^\[\s*\]\s*/i, "")));
+        var itemSpan = el("span");
+        var cleanLine = line.replace(/^[-*•]\s*/i, "").replace(/^\[\s*\]\s*/i, "");
+        itemSpan.innerHTML = window.MD && window.MD.inline ? window.MD.inline(cleanLine) : cleanLine;
+        item.appendChild(itemSpan);
         gb.appendChild(item);
       });
       if (gb.children.length === 0) return;
@@ -1004,21 +1010,28 @@
     var detectedTotal = 120000;
     var detectedCurr = "INR";
 
-    var mTotal = text.match(/(?:Total|Overall|Grand\s+Total)[^0-9\n]*([₹$€£])?\s*([\d,]{3,10})/i);
-    if (!mTotal) {
-      mTotal = text.match(/([₹$€£])\s*([\d,]{3,10})/);
-    }
-    if (mTotal) {
-      var sym = mTotal[1];
-      var numStr = mTotal[2].replace(/,/g, "");
-      var val = parseInt(numStr, 10);
-      if (val > 0) {
-        detectedTotal = val;
-        if (sym === "$") detectedCurr = "USD";
-        else if (sym === "€") detectedCurr = "EUR";
-        else if (sym === "£") detectedCurr = "GBP";
-        else if (sym === "¥") detectedCurr = "JPY";
-        else detectedCurr = "INR";
+    // Support Lakhs / Lacs (e.g. 15 Lakh, ₹15 Lacs)
+    var mLakh = text.match(/(\d+(?:\.\d+)?)\s*(?:lakh|lakhs|lac|lacs)\b/i);
+    if (mLakh) {
+      detectedTotal = Math.round(parseFloat(mLakh[1]) * 100000);
+      detectedCurr = "INR";
+    } else {
+      var mTotal = text.match(/(?:Total|Overall|Grand\s+Total)[^0-9\n]*([₹$€£])?\s*([\d,]{3,10})/i);
+      if (!mTotal) {
+        mTotal = text.match(/([₹$€£])\s*([\d,]{3,10})/);
+      }
+      if (mTotal) {
+        var sym = mTotal[1];
+        var numStr = mTotal[2].replace(/,/g, "");
+        var val = parseInt(numStr, 10);
+        if (val > 0) {
+          detectedTotal = val;
+          if (sym === "$") detectedCurr = "USD";
+          else if (sym === "€") detectedCurr = "EUR";
+          else if (sym === "£") detectedCurr = "GBP";
+          else if (sym === "¥") detectedCurr = "JPY";
+          else detectedCurr = "INR";
+        }
       }
     }
 
@@ -1269,7 +1282,7 @@
     head.appendChild(avatar);
 
     var titleBox = el("div", "card-title");
-    titleBox.appendChild(el("strong", null, "TravelBrain AI"));
+    titleBox.appendChild(el("strong", null, "Roamly AI"));
     titleBox.appendChild(el("small", null, "Plan ready"));
     head.appendChild(titleBox);
 
@@ -1292,7 +1305,7 @@
       var url = URL.createObjectURL(blob);
       var a = document.createElement("a");
       a.href = url;
-      a.download = "travelbrain-plan.md";
+      a.download = "roamly-plan.md";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1331,42 +1344,74 @@
       body.appendChild(map);
     }
 
-    // 4. Feature 5: Weather Strip & Wardrobe Advice
+    function extractSectionText(src, header) {
+      if (!src) return "";
+      var re = new RegExp("(?:###|\\*\\*|##)\\s*" + header + "[\\s\\S]*?(?=(?:###|\\*\\*|##)\\s*(?:Flight|Weather|Hotel|Itinerary|Budget|Packing|Must-Visit|Travel|Practical|Day)|\\Z)", "i");
+      var m = String(src).match(re);
+      return m ? m[0] : "";
+    }
+
+    // 4. Step 1 in Flow: Flight Information Card
+    var flightText = result.flight_results || extractSectionText(result.answer, "Flight Information");
+    if (flightText) {
+      var flightCard = renderExtraSection(
+        "Flight Information & Airfare",
+        "Airlines serving route, airports, durations & estimated airfare",
+        "M17.8 19.2 16 11l3.5-3.5a2.1 2.1 0 0 0-3-3L13 8 4.8 6.2a.8.8 0 0 0-.8 1.3L8 11l-2 2-2.2-.5a.6.6 0 0 0-.6 1L5 16l2.5 1.8a.6.6 0 0 0 1-.6L8 15l2-2 3.5 4a.8.8 0 0 0 1.3-.8Z",
+        flightText
+      );
+      if (flightCard) body.appendChild(flightCard);
+    }
+
+    // 5. Step 2 in Flow: Weather Strip & Climate Guidance
     var weatherStrip = renderWeatherStrip(result.weather_results || result.answer, result.__query);
     if (weatherStrip) {
       body.appendChild(weatherStrip);
     }
 
-    // 5. Main Narrative Itinerary
-    body.appendChild(mdBlock(result.answer, "The agent returned an empty response."));
+    // 6. Step 3 in Flow: Hotel Suggestions & Accommodations
+    var hotelText = result.hotel_results || extractSectionText(result.answer, "Hotel Suggestions");
+    if (hotelText) {
+      var hotelCard = renderExtraSection(
+        "Hotel Suggestions & Stays",
+        "Top recommended accommodations, prime areas & estimated rates",
+        "M3 21h18M3 7v14M21 7v14M6 11h4M6 15h4M14 11h4M14 15h4M9 3h6v4H9z",
+        hotelText
+      );
+      if (hotelCard) body.appendChild(hotelCard);
+    }
 
-    // 6. Day-by-Day Timeline
+    // 7. Step 4 in Flow: Day-by-Day Timeline Itinerary
     var timeline = renderItineraryTimeline(result.itinerary || result.answer);
     if (timeline) {
       body.appendChild(timeline);
     }
 
-    // 7. Extra Sections
+    // 8. Step 5 in Flow: Budget Breakdown, Packing Checklist & Essentials
     var extraWrap = el("div", "extra-sections");
 
     // Feature 4: Budget Breakdown with Currency & Split-Bill Calculator
-    var budget = renderBudgetSectionWithCalculator(result.budget_breakdown, travellersCount);
+    var bText = result.budget_breakdown || extractSectionText(result.answer, "Budget Breakdown") || ("### Budget Breakdown\n- Total Estimated Cost: " + (result.__query || "₹1,50,000"));
+    var budget = renderBudgetSectionWithCalculator(bText, travellersCount);
     if (budget) extraWrap.appendChild(budget);
 
-    var packing = renderPackingChecklist(result.packing_list);
+    var pText = result.packing_list || extractSectionText(result.answer, "Packing Checklist") || ("### Packing Checklist\n- Essentials: Passport, ID, Tickets, Credit Cards\n- Clothing: Weather-appropriate layers, comfortable walking pants\n- Footwear: Cushioned walking sneakers, hiking shoes\n- Electronics: Chargers, universal plug adapter, power bank\n- Toiletries: Sunscreen, lip balm, travel med kit");
+    var packing = renderPackingChecklist(pText);
     if (packing) extraWrap.appendChild(packing);
 
-    var explore = renderExtraSection("Must-Visit & Local Picks", "Attractions, hidden gems & food", "M12 21s-6-5.686-6-10a6 6 0 1 1 12 0c0 4.314-6 10-6 10Zm0-7a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z", result.must_visit);
+    var exploreText = result.must_visit || extractSectionText(result.answer, "Must-Visit") || ("### Must-Visit & Local Picks\n- Top Attractions: Key sights and historic monuments\n- Hidden Gems: Local bazaars and panoramic viewpoints\n- Local Food & Drinks: Traditional delicacies and street snacks");
+    var explore = renderExtraSection("Must-Visit & Local Picks", "Attractions, hidden gems & food", "M12 21s-6-5.686-6-10a6 6 0 1 1 12 0c0 4.314-6 10-6 10Zm0-7a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z", exploreText);
     if (explore) extraWrap.appendChild(explore);
 
-    var essentials = renderExtraSection("Travel Essentials", "Visa, currency, plugs & more", "M9 12l2 2 4-4M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Z", result.travel_essentials);
+    var essentialsText = result.travel_essentials || extractSectionText(result.answer, "Travel Essentials") || ("### Travel Essentials\n- Visa: Check entry requirements and passport validity\n- Currency: Local currency & major card acceptance\n- Plugs: Standard travel adapter\n- Safety: Official ride-hailing apps and emergency contacts");
+    var essentials = renderExtraSection("Travel Essentials", "Visa, currency, plugs & more", "M9 12l2 2 4-4M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Z", essentialsText);
     if (essentials) extraWrap.appendChild(essentials);
 
     if (extraWrap.children.length > 0) {
       body.appendChild(extraWrap);
     }
 
-    // 8. Feature 7: Quick Follow-up Action Chips
+    // 9. Quick Follow-up Action Chips
     var followups = renderFollowupChips(dest);
     if (followups) {
       body.appendChild(followups);
@@ -1389,7 +1434,7 @@
     head.appendChild(avatar);
 
     var titleBox = el("div", "card-title");
-    titleBox.appendChild(el("strong", null, "TravelBrain Concierge"));
+    titleBox.appendChild(el("strong", null, "Roamly Concierge"));
     titleBox.appendChild(el("small", null, "Local Insider Guide"));
     head.appendChild(titleBox);
 
