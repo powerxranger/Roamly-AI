@@ -35,6 +35,7 @@ nest_asyncio.apply()
 
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"
+DIST_DIR = BASE_DIR / "dist"
 
 app = FastAPI(
     title="Roamly AI",
@@ -60,6 +61,13 @@ app.mount(
     StaticFiles(directory=str(FRONTEND_DIR / "static")),
     name="static"
 )
+
+if (DIST_DIR / "assets").exists():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(DIST_DIR / "assets")),
+        name="assets"
+    )
 
 
 templates = Jinja2Templates(
@@ -102,6 +110,10 @@ def _set_session_cookie(response: Response, session_id: str) -> None:
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    if (DIST_DIR / "index.html").exists():
+        with open(DIST_DIR / "index.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+
     return templates.TemplateResponse(
         request=request,
         name="index.html",
