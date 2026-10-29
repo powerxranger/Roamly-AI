@@ -97,11 +97,18 @@ CACHE_TTL_DESTINATION = int(os.getenv("CACHE_TTL_DESTINATION", str(24 * 3600)))
 # Comma-separated origins allowed to call this API from a browser. Leave unset
 # when the frontend is proxied onto the same origin (see vercel.json), which
 # keeps the session cookie first-party.
+_raw_cors = os.getenv("CORS_ORIGINS", "")
 CORS_ORIGINS = [
     origin.strip()
-    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    for origin in _raw_cors.split(",")
     if origin.strip()
 ]
+if not CORS_ORIGINS:
+    CORS_ORIGINS = [
+        "https://roamly-ai-eight.vercel.app",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
 
 # A cross-site cookie must be SameSite=None, and SameSite=None requires
 # Secure. Configuring CORS therefore implies both.

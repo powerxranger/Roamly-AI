@@ -6,11 +6,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://travelbrain-api.onrender.com/api/:path*"
+      "destination": "https://roamly-ai-v6kv.onrender.com/api/:path*"
     },
     {
       "source": "/health",
-      "destination": "https://travelbrain-api.onrender.com/health"
+      "destination": "https://roamly-ai-v6kv.onrender.com/health"
     }
   ],
   "headers": [
