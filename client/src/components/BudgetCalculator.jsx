@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { renderMarkdown } from '../utils/markdown'
 
 const RATES = {
@@ -58,6 +58,12 @@ export default function BudgetCalculator({ content, travellersCount = 2 }) {
   const baseUsd = detectedTotal / (RATES[detectedCurr] || 1)
   const [curr, setCurr] = useState(detectedCurr)
   const [people, setPeople] = useState(travellersCount > 0 ? travellersCount : 2)
+
+  useEffect(() => {
+    if (travellersCount && travellersCount > 0) {
+      setPeople(travellersCount)
+    }
+  }, [travellersCount])
 
   const formatNumber = (n, c) => {
     if (c === 'INR') return n.toLocaleString('en-IN')

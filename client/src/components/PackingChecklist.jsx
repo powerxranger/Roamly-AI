@@ -1,188 +1,94 @@
 import React, { useState, useEffect } from 'react'
 
-const DEFAULT_PACKING_CATEGORIES = [
-  {
-    category: '🗂️ Travel Documents & Cards',
-    id: 'docs',
-    items: [
-      'Passport / Government ID',
-      'Flight tickets & boarding passes',
-      'Hotel & tour booking vouchers',
-      'Forex / Credit cards & emergency cash',
-      'Travel health insurance policy',
-    ],
-  },
-  {
-    category: '👕 Clothing & Weather Wear',
-    id: 'clothing',
-    items: [
-      'Breathable casual shirts & t-shirts (4–5)',
-      'Comfortable walking trousers / jeans',
-      'Smart casual evening dining outfit',
-      'Weather-appropriate jacket / windbreaker',
-      'Comfortable undergarments & cushioned socks',
-      'Sleepwear & thermal base layer',
-    ],
-  },
-  {
-    category: '👟 Footwear',
-    id: 'footwear',
-    items: [
-      'Broken-in cushioned walking sneakers',
-      'Smart evening loafers / flats',
-      'Waterproof sandals / slip-ons',
-    ],
-  },
-  {
-    category: '🧴 Toiletries & Personal Health',
-    id: 'toiletries',
-    items: [
-      'High-SPF sunscreen & hydrating lip balm',
-      'Travel toothbrush, paste & dental floss',
-      'Personal prescription medications',
-      'First-aid kit (band-aids, pain relief, blister pads)',
-      'Hand sanitizer & disinfectant wipes',
-    ],
-  },
-  {
-    category: '🔌 Electronics & Gear',
-    id: 'electronics',
-    items: [
-      'Smartphone & high-speed charging cables',
-      'Universal international travel plug adapter',
-      '10,000mAh+ portable power bank',
-      'Noise-canceling earphones / headphones',
-    ],
-  },
-  {
-    category: '🎒 Daypack & Essentials',
-    id: 'essentials',
-    items: [
-      'Lightweight daypack / crossbody sling bag',
-      'UV-protective sunglasses',
-      'Insulated reusable water bottle',
-      'Compact travel umbrella / rain poncho',
-    ],
-  },
+const INITIAL_PACKING_ITEMS = [
+  { id: 'p1', category: '🗂️ Documents', name: 'Passport & Government ID', note: 'Must have 6+ months validity remaining' },
+  { id: 'p2', category: '🗂️ Documents', name: 'Flight Tickets & Hotel Bookings', note: 'Save offline PDF copies on your phone' },
+  { id: 'p3', category: '🗂️ Documents', name: 'Forex / Credit Cards & Cash', note: 'Carry at least 2 cards & local cash' },
+  { id: 'p4', category: '👕 Clothing', name: 'Weather-Ready Casual Outfits', note: 'Breathable tees, comfortable trousers' },
+  { id: 'p5', category: '👕 Clothing', name: 'Smart Evening Outfit', note: 'For fine dining or cultural performances' },
+  { id: 'p6', category: '👕 Clothing', name: 'Light Windbreaker / Jacket', note: 'For cooler evenings or air-conditioned transit' },
+  { id: 'p7', category: '👟 Footwear', name: 'Cushioned Walking Sneakers', note: 'Essential for 10,000+ daily sightseeing steps' },
+  { id: 'p8', category: '👟 Footwear', name: 'Casual Loafers / Evening Shoes', note: 'Smart slip-ons for dinner and strolls' },
+  { id: 'p9', category: '🔌 Tech', name: 'Universal Travel Plug Adapter', note: 'Compatible with destination socket types' },
+  { id: 'p10', category: '🔌 Tech', name: 'Portable Power Bank (10,000mAh)', note: 'Must be packed in carry-on bag, not checked' },
+  { id: 'p11', category: '🧴 Toiletries', name: 'High-SPF Sunscreen & Lip Balm', note: 'SPF 50+ recommended for outdoor exploring' },
+  { id: 'p12', category: '🧴 Toiletries', name: 'Personal First-Aid & Prescription Meds', note: 'Pain relievers, band-aids, blister pads' },
+  { id: 'p13', category: '🎒 Essentials', name: 'UV-Protected Sunglasses', note: 'Essential for sunny walking tours' },
+  { id: 'p14', category: '🎒 Essentials', name: 'Compact Daypack / Sling Bag', note: 'Secure front-facing bag for city strolls' },
 ]
 
 export default function PackingChecklist({ content }) {
   const text = String(content || '').trim()
 
-  const [categories, setCategories] = useState([])
+  const [items, setItems] = useState(INITIAL_PACKING_ITEMS)
   const [checkedMap, setCheckedMap] = useState({})
-  const [activeCategory, setActiveCategory] = useState('all')
-  const [customInput, setCustomInput] = useState('')
+  const [activeCategory, setActiveCategory] = useState('All')
+  const [newItemName, setNewItemName] = useState('')
+  const [newItemCat, setNewItemCat] = useState('🎒 Essentials')
   const [copied, setCopied] = useState(false)
 
-  // Smart parser: splits text lines and comma-separated sub-items into rich individual checklist items
+  // Smart item parser: extracts items from AI text if rich
   useEffect(() => {
-    if (!text || text.length < 15) {
-      setCategories(DEFAULT_PACKING_CATEGORIES)
-      return
-    }
+    if (!text || text.length < 20) return
 
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-    const parsedGroups = []
-    let currentCategory = null
-    let itemIdx = 0
+    const extracted = []
+    let currentCat = '🧳 Essentials'
 
-    lines.forEach((line) => {
-      // Check if line is a category header (e.g. ### Clothing, - Essentials:, **Footwear**)
-      const isHeader =
-        line.startsWith('#') ||
-        line.startsWith('**') ||
-        /^[A-Z][a-zA-Z\s&/]+:/.test(line)
-
-      if (isHeader) {
-        let title = line
-          .replace(/^[#*`_~-]+\s*/g, '')
-          .replace(/:\s*$/, '')
-          .trim()
-
-        // Skip meta title "Packing Checklist"
-        if (/^packing\s+checklist$/i.test(title)) return
-
-        // If line has format: "- Essentials: Passport, ID, Tickets"
-        const inlineSplit = line.split(/:\s+/)
-        if (inlineSplit.length > 1 && !line.startsWith('#')) {
-          const catName = inlineSplit[0].replace(/^[-*•#\s]+/, '').trim()
-          const rawItems = inlineSplit.slice(1).join(': ').split(/,\s*|\band\b/i)
-
-          const items = rawItems
-            .map((it) => it.replace(/^[-*•\s]+/, '').trim())
-            .filter((it) => it.length > 1)
-
-          if (items.length > 0) {
-            parsedGroups.push({
-              id: `cat-${parsedGroups.length}`,
-              category: catName,
-              items: items.map((it) => ({ id: `item-${itemIdx++}`, text: it })),
-            })
-            return
-          }
+    lines.forEach((line, idx) => {
+      if (line.startsWith('#') || line.startsWith('**') || /^[A-Z][a-zA-Z\s]+:/.test(line)) {
+        const catClean = line.replace(/^[#*`_~-]+\s*/g, '').replace(/:\s*$/, '').trim()
+        if (!/packing\s+checklist/i.test(catClean)) {
+          currentCat = catClean
         }
-
-        currentCategory = {
-          id: `cat-${parsedGroups.length}`,
-          category: title,
-          items: [],
-        }
-        parsedGroups.push(currentCategory)
         return
       }
 
-      // Checkbox or bullet items
-      const cleanItem = line
-        .replace(/^[-*•]\s*/, '')
-        .replace(/^\[\s*\]\s*/, '')
-        .trim()
-
-      if (cleanItem) {
-        // If comma-separated in bullet, split into individual items
-        const subItems = cleanItem.split(/,\s*|\band\b/i)
-        subItems.forEach((sub) => {
-          const s = sub.trim()
-          if (s.length > 1) {
-            if (!currentCategory) {
-              currentCategory = {
-                id: `cat-${parsedGroups.length}`,
-                category: '🧳 Trip Essentials',
-                items: [],
+      const clean = line.replace(/^[-*•]\s*/, '').replace(/^\[\s*\]\s*/, '').trim()
+      if (clean && clean.length > 2) {
+        // Check for colon in line: "Item: Note"
+        const parts = clean.split(/:\s+/)
+        if (parts.length > 1) {
+          extracted.push({
+            id: `ai-${idx}`,
+            category: currentCat,
+            name: parts[0].trim(),
+            note: parts.slice(1).join(': ').trim(),
+          })
+        } else {
+          // Check for comma separated items
+          const subItems = clean.split(/,\s*/)
+          if (subItems.length > 1) {
+            subItems.forEach((sub, sIdx) => {
+              if (sub.trim().length > 1) {
+                extracted.push({
+                  id: `ai-${idx}-${sIdx}`,
+                  category: currentCat,
+                  name: sub.trim(),
+                  note: 'Pack in daypack / luggage',
+                })
               }
-              parsedGroups.push(currentCategory)
-            }
-            currentCategory.items.push({ id: `item-${itemIdx++}`, text: s })
+            })
+          } else {
+            extracted.push({
+              id: `ai-${idx}`,
+              category: currentCat,
+              name: clean,
+              note: 'Recommended for this destination',
+            })
           }
-        })
+        }
       }
     })
 
-    // If parsing yielded good categories with 6+ items, use them; otherwise use rich defaults
-    const totalFound = parsedGroups.reduce((acc, c) => acc + c.items.length, 0)
-    if (parsedGroups.length > 0 && totalFound >= 6) {
-      setCategories(
-        parsedGroups.map((c) => ({
-          ...c,
-          items: c.items.map((it) => (typeof it === 'string' ? it : it.text)),
-        }))
-      )
-    } else {
-      setCategories(DEFAULT_PACKING_CATEGORIES)
+    if (extracted.length >= 8) {
+      setItems(extracted)
     }
   }, [text])
 
-  // Count items
-  const allItems = []
-  categories.forEach((cat) => {
-    cat.items.forEach((it, idx) => {
-      allItems.push({ catId: cat.id, id: `${cat.id}-${idx}`, text: it })
-    })
-  })
-
-  const totalItems = allItems.length
-  const packedCount = allItems.filter((it) => !!checkedMap[it.id]).length
-  const pct = totalItems > 0 ? Math.round((packedCount / totalItems) * 100) : 0
+  const totalCount = items.length
+  const packedCount = items.filter((it) => !!checkedMap[it.id]).length
+  const pct = totalCount > 0 ? Math.round((packedCount / totalCount) * 100) : 0
 
   const handleToggle = (id) => {
     setCheckedMap((prev) => ({
@@ -193,7 +99,7 @@ export default function PackingChecklist({ content }) {
 
   const handleCheckAll = () => {
     const updated = {}
-    allItems.forEach((it) => {
+    items.forEach((it) => {
       updated[it.id] = true
     })
     setCheckedMap(updated)
@@ -205,42 +111,49 @@ export default function PackingChecklist({ content }) {
 
   const handleAddCustom = (e) => {
     e.preventDefault()
-    if (!customInput.trim()) return
+    if (!newItemName.trim()) return
 
-    const newItemText = customInput.trim()
-    setCategories((prev) => {
-      const copy = [...prev]
-      if (copy.length === 0) {
-        copy.push({ id: 'custom', category: '✨ Custom Items', items: [newItemText] })
-      } else {
-        copy[0].items = [newItemText, ...copy[0].items]
-      }
-      return copy
-    })
-    setCustomInput('')
+    const newItem = {
+      id: `custom-${Date.now()}`,
+      category: newItemCat,
+      name: newItemName.trim(),
+      note: 'Custom personal item',
+    }
+
+    setItems((prev) => [newItem, ...prev])
+    setNewItemName('')
   }
 
-  const handleCopyChecklist = () => {
+  const handleCopy = () => {
     const lines = ['# Trip Packing Checklist', '']
-    categories.forEach((cat) => {
-      lines.push(`## ${cat.category}`)
-      cat.items.forEach((it, idx) => {
-        const isDone = !!checkedMap[`${cat.id}-${idx}`]
-        lines.push(`- [${isDone ? 'x' : ' '}] ${it}`)
-      })
-      lines.push('')
+    items.forEach((it) => {
+      const isDone = !!checkedMap[it.id]
+      lines.push(`- [${isDone ? 'x' : ' '}] **${it.name}** (${it.category}) — ${it.note}`)
     })
-    const textToCopy = lines.join('\n')
+    const str = lines.join('\n')
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(textToCopy).then(() => {
+      navigator.clipboard.writeText(str).then(() => {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       })
     }
   }
 
+  // Categories list
+  const categoryNames = ['All']
+  items.forEach((it) => {
+    const cleanCat = it.category.replace(/^[^\w\s]+\s*/, '')
+    if (!categoryNames.includes(cleanCat)) categoryNames.push(cleanCat)
+  })
+
+  const filteredItems = items.filter((it) => {
+    if (activeCategory === 'All') return true
+    return it.category.includes(activeCategory)
+  })
+
   return (
-    <div className="extra-card packing-card-enhanced glass-card">
+    <div className="extra-card packing-table-card glass-card" id="packing-section">
+      {/* Head */}
       <div className="extra-card-head">
         <div className="extra-card-ico">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -248,49 +161,56 @@ export default function PackingChecklist({ content }) {
           </svg>
         </div>
         <div className="extra-card-title">
-          <strong>Interactive Packing Checklist</strong>
-          <small>Categorized essentials, custom additions & live packing progress</small>
+          <strong>Interactive Packing Checklist Table</strong>
+          <small>Dedicated 14-item checker with categories, tips & live packing progress</small>
         </div>
         <div className="extra-card-tools">
           <button
             type="button"
             className="btn btn-soft btn-sm packing-copy-btn"
-            onClick={handleCopyChecklist}
+            onClick={handleCopy}
             title="Copy checklist as markdown"
           >
-            {copied ? '✓ Copied!' : '📋 Copy List'}
+            {copied ? '✓ Copied' : '📋 Copy List'}
           </button>
         </div>
       </div>
 
       <div className="extra-card-body">
-        {/* Progress Tracker Strip */}
-        <div className="packing-progress-wrap">
-          <div className="packing-progress-top">
-            <div className="packing-progress-stat">
-              <span className="packing-counter-badge">
-                {packedCount} / {totalItems} Packed
+        {/* Progress Tracker Card */}
+        <div className="packing-progress-panel">
+          <div className="packing-progress-meta">
+            <div className="packing-badge-wrap">
+              <span className="packing-pill-count">
+                {packedCount} / {totalCount} Items Packed
               </span>
-              <span className="packing-progress-label">
-                {pct === 100
-                  ? '🎉 100% Packed! You are ready to fly!'
-                  : `${pct}% completed — keep packing!`}
+              <span className="packing-pill-pct">
+                {pct === 100 ? '🎉 All Packed & Ready!' : `${pct}% completed`}
               </span>
             </div>
 
-            <div className="packing-quick-actions">
-              <button type="button" className="packing-action-btn" onClick={handleCheckAll}>
+            {/* Clear separate buttons with high contrast & explicit spacing */}
+            <div className="packing-control-buttons">
+              <button
+                type="button"
+                className="btn-checklist btn-checklist-check"
+                onClick={handleCheckAll}
+              >
                 ✓ Check all
               </button>
-              <button type="button" className="packing-action-btn" onClick={handleReset}>
+              <button
+                type="button"
+                className="btn-checklist btn-checklist-reset"
+                onClick={handleReset}
+              >
                 ↺ Reset
               </button>
             </div>
           </div>
 
-          <div className="packing-progress-track">
+          <div className="packing-progress-bar-bg">
             <div
-              className="packing-progress-fill"
+              className="packing-progress-bar-fill"
               style={{
                 width: `${pct}%`,
                 backgroundColor: pct === 100 ? '#10b981' : 'var(--accent)',
@@ -299,82 +219,99 @@ export default function PackingChecklist({ content }) {
           </div>
         </div>
 
-        {/* Category Filter Chips */}
-        <div className="packing-category-tabs">
-          <button
-            type="button"
-            className={`packing-cat-tab ${activeCategory === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveCategory('all')}
-          >
-            🌟 All ({totalItems})
-          </button>
-          {categories.map((cat) => {
-            const catItemCount = cat.items.length
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                className={`packing-cat-tab ${activeCategory === cat.id ? 'active' : ''}`}
-                onClick={() => setActiveCategory(cat.id)}
-              >
-                {cat.category.split(' ')[0]} {cat.category.split(' ').slice(1, 3).join(' ')} ({catItemCount})
-              </button>
-            )
-          })}
+        {/* Category Filters Strip */}
+        <div className="packing-filter-strip">
+          {categoryNames.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              className={`packing-filter-btn ${activeCategory === cat ? 'active' : ''}`}
+              onClick={() => setActiveCategory(cat)}
+            >
+              {cat === 'All' ? `🌟 All (${totalCount})` : cat}
+            </button>
+          ))}
         </div>
 
-        {/* Add Custom Item Input */}
-        <form className="packing-add-form" onSubmit={handleAddCustom}>
-          <input
-            type="text"
-            className="packing-add-input"
-            placeholder="+ Add personal item (e.g. Camera lenses, passport pouch, power bank)..."
-            value={customInput}
-            onChange={(e) => setCustomInput(e.target.value)}
-          />
-          <button type="submit" className="btn btn-primary btn-sm packing-add-btn">
-            Add
-          </button>
-        </form>
+        {/* Dedicated Packing Table */}
+        <div className="packing-table-container">
+          <table className="packing-table">
+            <thead>
+              <tr>
+                <th className="th-check">Status</th>
+                <th className="th-cat">Category</th>
+                <th className="th-item">Essential Item</th>
+                <th className="th-note">Travel Advice / Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredItems.map((it) => {
+                const isChecked = !!checkedMap[it.id]
 
-        {/* Categorized Checkbox Grid */}
-        <div className="packing-categories-grid">
-          {categories.map((cat) => {
-            if (activeCategory !== 'all' && activeCategory !== cat.id) return null
-
-            return (
-              <div key={cat.id} className="packing-category-card">
-                <div className="packing-category-header">
-                  <strong>{cat.category}</strong>
-                  <span className="packing-category-badge">{cat.items.length} items</span>
-                </div>
-
-                <div className="packing-items-list">
-                  {cat.items.map((item, idx) => {
-                    const itemId = `${cat.id}-${idx}`
-                    const isChecked = !!checkedMap[itemId]
-
-                    return (
-                      <label
-                        key={itemId}
-                        className={`packing-item-row ${isChecked ? 'packed' : ''}`}
-                      >
+                return (
+                  <tr
+                    key={it.id}
+                    className={`packing-row ${isChecked ? 'row-packed' : ''}`}
+                    onClick={() => handleToggle(it.id)}
+                  >
+                    <td className="td-check" onClick={(e) => e.stopPropagation()}>
+                      <label className="checkbox-container">
                         <input
                           type="checkbox"
-                          className="packing-checkbox"
                           checked={isChecked}
-                          onChange={() => handleToggle(itemId)}
+                          onChange={() => handleToggle(it.id)}
                         />
-                        <span className="packing-item-text">{item}</span>
-                        {isChecked && <span className="packing-check-icon">✓</span>}
+                        <span className="checkbox-mark"></span>
                       </label>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
+                    </td>
+
+                    <td className="td-cat">
+                      <span className="cat-badge">{it.category}</span>
+                    </td>
+
+                    <td className="td-item">
+                      <strong className={`item-name ${isChecked ? 'text-done' : ''}`}>
+                        {it.name}
+                      </strong>
+                    </td>
+
+                    <td className="td-note">
+                      <span className="item-note">{it.note}</span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
+
+        {/* Add Personal Item Row */}
+        <form className="packing-add-row" onSubmit={handleAddCustom}>
+          <input
+            type="text"
+            className="packing-add-text"
+            placeholder="+ Add personal item (e.g., Camera lens, medicines, hiking boots)..."
+            value={newItemName}
+            onChange={(e) => setNewItemName(e.target.value)}
+          />
+
+          <select
+            className="packing-add-select"
+            value={newItemCat}
+            onChange={(e) => setNewItemCat(e.target.value)}
+          >
+            <option value="🗂️ Documents">🗂️ Documents</option>
+            <option value="👕 Clothing">👕 Clothing</option>
+            <option value="👟 Footwear">👟 Footwear</option>
+            <option value="🧴 Toiletries">🧴 Toiletries</option>
+            <option value="🔌 Tech">🔌 Tech</option>
+            <option value="🎒 Essentials">🎒 Essentials</option>
+          </select>
+
+          <button type="submit" className="btn btn-primary btn-sm packing-add-submit">
+            + Add to List
+          </button>
+        </form>
       </div>
     </div>
   )
