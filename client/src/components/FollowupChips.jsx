@@ -3,12 +3,18 @@ import React from 'react'
 export default function FollowupChips({ dest, onSelect }) {
   if (!dest) return null
 
+  // Clean any trailing prepositions or noise
+  const cleanDest = String(dest || '')
+    .replace(/\b(?:like|maybe|please|just|get|freshest|dishes)\b/gi, '')
+    .replace(/\s+(?:in|to|for|from|with|and|or)$/i, '')
+    .trim() || 'your destination'
+
   const suggestions = [
-    `🍝 Best local street food & budget eats in ${dest}`,
-    `🚇 Public transport guide & transit passes for ${dest}`,
-    `🌧️ Rainy day & bad weather backup itinerary in ${dest}`,
-    `💡 Top travel scams to avoid & safety tips for ${dest}`,
-    `📸 5 most photogenic hidden photo spots in ${dest}`,
+    `🍝 Best local street food & authentic dining in ${cleanDest}`,
+    `🚇 Public transport guide & transit passes for ${cleanDest}`,
+    `🌧️ Rainy day & bad weather backup itinerary in ${cleanDest}`,
+    `💡 Top travel scams to avoid & safety tips for ${cleanDest}`,
+    `📸 5 most photogenic hidden photo spots in ${cleanDest}`,
   ]
 
   return (

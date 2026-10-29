@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { renderMarkdown } from '../utils/markdown'
 import BookingShortcuts from './BookingShortcuts'
 import LeafletMap from './LeafletMap'
@@ -30,12 +30,20 @@ function toText(value) {
 
 function cleanLocation(str) {
   if (!str) return ''
-  return str
-    .replace(/^(?:the|a|an)\s+/i, '')
-    .replace(/\b(?:like|maybe|please|just|want|plan|trip|vacation|getaway|explore|visit)\b/gi, '')
-    .replace(/[#*`_]/g, '')
+  let s = String(str)
+    .replace(/[#*`_~]/g, '')
+    .replace(/\b(?:like|maybe|please|just|want|plan|trip|vacation|getaway|explore|visit|looking for|help me|going to|travel to|freshest|dishes)\b/gi, '')
+    .replace(/\b(?:airport|international|intl|aeroporto|flughafen)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
+
+  // Remove leading prepositions (e.g. "in Italy" -> "Italy")
+  s = s.replace(/^(?:the|a|an|in|to|from|at|near|for|around)\s+/i, '')
+  // Remove trailing prepositions and conjunctions (e.g. "Italy in" -> "Italy", "Rome for" -> "Rome")
+  s = s.replace(/\s+(?:in|to|from|for|on|at|during|with|and|or|by|the|a|an)$/i, '')
+  // Remove trailing and leading punctuation
+  s = s.replace(/^[,.\s-]+|[,.\s-]+$/g, '')
+  return s.trim()
 }
 
 function extractDestination(queryText, flightText, answerText) {
@@ -44,31 +52,35 @@ function extractDestination(queryText, flightText, answerText) {
     const arrMatch = String(flightText).match(/(?:likely\s+arrival\s+airport|arrival\s+airport|destination)[:\s]+([^,\n.(]+)/i)
     if (arrMatch) {
       const cleaned = cleanLocation(arrMatch[1])
-      if (cleaned && cleaned.length > 2 && cleaned.length < 35) return cleaned
+      if (cleaned && cleaned.length > 2 && cleaned.length < 35 && !/dishes|transit|food/i.test(cleaned)) {
+        return cleaned
+      }
     }
   }
 
   // 2. From answer/itinerary: "Trip to [Destination]"
   if (answerText) {
-    const headMatch = String(answerText).match(/(?:trip\s+to|itinerary\s+for|welcome\s+to)\s+([A-Za-z\s,-]{2,35})/i)
+    const headMatch = String(answerText).match(/(?:trip\s+to|itinerary\s+for|welcome\s+to|destination:)\s+([A-Za-z\s,-]{2,35})/i)
     if (headMatch) {
       const cleaned = cleanLocation(headMatch[1])
-      if (cleaned && cleaned.length > 2 && cleaned.length < 35) return cleaned
+      if (cleaned && cleaned.length > 2 && cleaned.length < 35 && !/dishes|transit|food/i.test(cleaned)) {
+        return cleaned
+      }
     }
   }
 
-  // 3. From user query
+  // 3. From user query - stop strictly before prepositions like "in [month]", "from", "for"
   if (queryText) {
     const q = String(queryText).trim()
-    const m = q.match(/(?:^|\s)(?:to|in|visit|explore)\s+([A-Za-z\s,-]{2,35}?)(?=\s+(?:from|for|in\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|spring|summer|winter|autumn)|with|on|departing|under|budget|during|\d|\.|\,|$))/i)
+    const m = q.match(/(?:^|\s)(?:to|visit|explore|travel to)\s+([A-Za-z\s,-]{2,30}?)(?=\s+(?:in\b|during\b|from\b|for\b|with\b|on\b|departing\b|under\b|budget\b|\d|\.|\,|$))/i)
     if (m) {
       const cleaned = cleanLocation(m[1])
-      if (cleaned && cleaned.length > 2) return cleaned
+      if (cleaned && cleaned.length > 2 && !/dishes|transit|food/i.test(cleaned)) return cleaned
     }
-    const m2 = q.match(/trip\s+to\s+([A-Za-z\s,-]{2,35})/i)
+    const m2 = q.match(/trip\s+to\s+([A-Za-z\s,-]{2,30})/i)
     if (m2) {
       const cleaned = cleanLocation(m2[1])
-      if (cleaned && cleaned.length > 2) return cleaned
+      if (cleaned && cleaned.length > 2 && !/dishes|transit|food/i.test(cleaned)) return cleaned
     }
   }
 
@@ -210,13 +222,25 @@ export default function PlanResult({ result, onFollowup, onToast }) {
     result.travel_essentials || extractSectionText(result.answer, 'Travel Essentials')
   const weatherText = result.weather_results || extractSectionText(result.answer, 'Weather')
 
-  // Refined & Accurate 5 Trip Details
+  // Clean Extracted Trip Details
   const dest = extractDestination(queryText, flightText, result.answer)
   const origin = extractOrigin(queryText, flightText)
   const durationStr = extractDuration(queryText, itineraryText)
-  const travellersCount = extractTravellers(queryText)
+  const initialTravellers = extractTravellers(queryText)
   const budgetStr = extractBudget(queryText, budgetText, flightText)
   const timingStr = extractTiming(queryText, weatherText)
+
+  // Interactive traveler count adjuster
+  const [travellersCount, setTravellersCount] = useState(initialTravellers)
+
+  const scrollToSection = (id) => {
+    const el = document.getElementById(id)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      el.classList.add('section-highlight')
+      setTimeout(() => el.classList.remove('section-highlight'), 1600)
+    }
+  }
 
   const handleCopy = () => {
     const text = plainTextOf(result)
@@ -258,8 +282,8 @@ export default function PlanResult({ result, onFollowup, onToast }) {
           </div>
 
           <div className="card-title">
-            <strong>Roamly AI Plan</strong>
-            <small>Personalized travel dossier for {dest}</small>
+            <strong>Roamly AI Dossier</strong>
+            <small>Autonomous trip plan for {dest}</small>
           </div>
 
           <div className="card-tools">
@@ -283,28 +307,40 @@ export default function PlanResult({ result, onFollowup, onToast }) {
 
         {/* Body */}
         <div className="card-body">
-          {/* Enhanced Top 5 Trip Overview Grid */}
-          <div className="trip-overview glass-panel">
+          {/* Highly Interactive Trip Overview Hero */}
+          <div className="trip-overview glass-panel" id="overview-section">
             <div className="trip-overview-head">
-              <span className="trip-overview-label">Trip Overview</span>
-              <span className="trip-overview-sub">Key details extracted by multi-agent analysis</span>
+              <div className="trip-overview-title-group">
+                <span className="trip-overview-label">✨ Interactive Trip Intelligence</span>
+                <span className="trip-overview-sub">Click tiles or adjust travellers to update your plan live</span>
+              </div>
             </div>
-            <div className="trip-overview-grid">
-              {dest && (
-                <div className="trip-overview-card">
-                  <div className="trip-overview-ico">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 21s-6-5.686-6-10a6 6 0 1 1 12 0c0 4.314-6 10-6 10Zm0-7a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-                    </svg>
-                  </div>
-                  <div className="trip-overview-body">
-                    <span className="trip-overview-card-label">Destination</span>
-                    <span className="trip-overview-card-value">{dest}</span>
-                  </div>
-                </div>
-              )}
 
-              <div className="trip-overview-card">
+            <div className="trip-overview-grid">
+              {/* Destination Card - Click to Jump to Map */}
+              <div
+                className="trip-overview-card interactive-tile"
+                onClick={() => scrollToSection('map-section')}
+                title="Click to view destination on interactive map"
+              >
+                <div className="trip-overview-ico">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 21s-6-5.686-6-10a6 6 0 1 1 12 0c0 4.314-6 10-6 10Zm0-7a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                  </svg>
+                </div>
+                <div className="trip-overview-body">
+                  <span className="trip-overview-card-label">Destination</span>
+                  <span className="trip-overview-card-value">{dest}</span>
+                </div>
+                <span className="tile-action-chip">🗺️ View Map</span>
+              </div>
+
+              {/* Origin Card - Click to Jump to Flights */}
+              <div
+                className="trip-overview-card interactive-tile"
+                onClick={() => scrollToSection('flights-section')}
+                title="Click to view flight route and carrier options"
+              >
                 <div className="trip-overview-ico">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10" />
@@ -314,9 +350,15 @@ export default function PlanResult({ result, onFollowup, onToast }) {
                   <span className="trip-overview-card-label">Origin</span>
                   <span className="trip-overview-card-value">{origin || 'Your City (Flexible)'}</span>
                 </div>
+                <span className="tile-action-chip">✈️ Flights</span>
               </div>
 
-              <div className="trip-overview-card">
+              {/* Duration Card - Click to Jump to Itinerary */}
+              <div
+                className="trip-overview-card interactive-tile"
+                onClick={() => scrollToSection('itinerary-section')}
+                title="Click to view full Day-by-Day schedule"
+              >
                 <div className="trip-overview-ico">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 6v6l4 2M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Z" />
@@ -326,9 +368,11 @@ export default function PlanResult({ result, onFollowup, onToast }) {
                   <span className="trip-overview-card-label">Duration</span>
                   <span className="trip-overview-card-value">{durationStr}</span>
                 </div>
+                <span className="tile-action-chip">📅 Days</span>
               </div>
 
-              <div className="trip-overview-card">
+              {/* Travellers Card - Interactive Live Stepper */}
+              <div className="trip-overview-card interactive-tile travellers-tile">
                 <div className="trip-overview-ico">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 14v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
@@ -336,13 +380,36 @@ export default function PlanResult({ result, onFollowup, onToast }) {
                 </div>
                 <div className="trip-overview-body">
                   <span className="trip-overview-card-label">Travellers</span>
-                  <span className="trip-overview-card-value">
-                    {travellersCount} {travellersCount === 1 ? 'Solo Traveller' : 'Travellers'}
-                  </span>
+                  <div className="traveller-stepper-control" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="stepper-btn"
+                      onClick={() => setTravellersCount((p) => Math.max(1, p - 1))}
+                      title="Decrease travelers"
+                    >
+                      −
+                    </button>
+                    <span className="stepper-count-val">
+                      {travellersCount} {travellersCount === 1 ? 'Solo' : 'People'}
+                    </span>
+                    <button
+                      type="button"
+                      className="stepper-btn"
+                      onClick={() => setTravellersCount((p) => Math.min(20, p + 1))}
+                      title="Increase travelers"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="trip-overview-card">
+              {/* Budget Card - Click to Jump to Budget Breakdown */}
+              <div
+                className="trip-overview-card interactive-tile"
+                onClick={() => scrollToSection('budget-section')}
+                title="Click to calculate per-person splits and currency conversion"
+              >
                 <div className="trip-overview-ico">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
@@ -352,9 +419,15 @@ export default function PlanResult({ result, onFollowup, onToast }) {
                   <span className="trip-overview-card-label">Budget</span>
                   <span className="trip-overview-card-value">{budgetStr}</span>
                 </div>
+                <span className="tile-action-chip">💰 Split</span>
               </div>
 
-              <div className="trip-overview-card">
+              {/* Timing / Season Card - Click to Jump to Weather */}
+              <div
+                className="trip-overview-card interactive-tile"
+                onClick={() => scrollToSection('weather-section')}
+                title="Click to view weather forecast and packing recommendations"
+              >
                 <div className="trip-overview-ico">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
@@ -364,36 +437,82 @@ export default function PlanResult({ result, onFollowup, onToast }) {
                   <span className="trip-overview-card-label">Timing / Season</span>
                   <span className="trip-overview-card-value">{timingStr}</span>
                 </div>
+                <span className="tile-action-chip">🌤️ Weather</span>
+              </div>
+            </div>
+
+            {/* Quick Navigation Anchor Bar */}
+            <div className="trip-quick-nav-bar">
+              <span className="quick-nav-label">Jump to:</span>
+              <div className="quick-nav-chips">
+                <button type="button" className="quick-nav-chip" onClick={() => scrollToSection('map-section')}>
+                  🗺️ Map
+                </button>
+                <button type="button" className="quick-nav-chip" onClick={() => scrollToSection('flights-section')}>
+                  ✈️ Flights
+                </button>
+                <button type="button" className="quick-nav-chip" onClick={() => scrollToSection('hotels-section')}>
+                  🏨 Stays
+                </button>
+                <button type="button" className="quick-nav-chip" onClick={() => scrollToSection('itinerary-section')}>
+                  📅 Itinerary
+                </button>
+                <button type="button" className="quick-nav-chip" onClick={() => scrollToSection('budget-section')}>
+                  💰 Budget
+                </button>
+                <button type="button" className="quick-nav-chip" onClick={() => scrollToSection('packing-section')}>
+                  🎒 Packing
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Quick Booking Shortcuts */}
-          <BookingShortcuts dest={dest} origin={origin} />
+          {/* Booking Shortcuts */}
+          <div id="shortcuts-section">
+            <BookingShortcuts dest={dest} origin={origin} />
+          </div>
 
           {/* Interactive Leaflet Map */}
-          <LeafletMap dest={dest} />
+          <div id="map-section">
+            <LeafletMap dest={dest} />
+          </div>
 
           {/* Enhanced Flight Comparison Card */}
-          {flightText && (
-            <FlightComparisonCard flightText={flightText} origin={origin} dest={dest} />
-          )}
+          <div id="flights-section">
+            {flightText && (
+              <FlightComparisonCard flightText={flightText} origin={origin} dest={dest} />
+            )}
+          </div>
 
           {/* Weather Widget */}
-          <WeatherWidget weatherData={weatherText || result.answer} query={queryText} />
+          <div id="weather-section">
+            <WeatherWidget weatherData={weatherText || result.answer} query={queryText} />
+          </div>
 
           {/* Enhanced Hotel Comparison Card */}
-          {hotelText && (
-            <HotelComparisonCard hotelText={hotelText} dest={dest} />
-          )}
+          <div id="hotels-section">
+            {hotelText && (
+              <HotelComparisonCard hotelText={hotelText} dest={dest} />
+            )}
+          </div>
 
           {/* Day-by-Day Interactive Itinerary Timeline */}
-          {itineraryText && <ItineraryTimeline itineraryText={itineraryText} />}
+          <div id="itinerary-section">
+            {itineraryText && <ItineraryTimeline itineraryText={itineraryText} />}
+          </div>
 
           {/* Extra Sections (Budget Calculator, Packing Checklist, Must-Visit, Essentials) */}
           <div className="extra-sections">
-            <BudgetCalculator content={budgetText || result.answer} travellersCount={travellersCount} />
-            <PackingChecklist content={packingText || result.answer} />
+            <div id="budget-section">
+              <BudgetCalculator
+                content={budgetText || result.answer}
+                travellersCount={travellersCount}
+              />
+            </div>
+
+            <div id="packing-section">
+              <PackingChecklist content={packingText || result.answer} />
+            </div>
 
             {exploreText && (
               <div className="extra-card glass-card">

@@ -9,10 +9,24 @@ from src.config.settings import CACHE_TTL_DESTINATION
 
 
 def _fallback_destination(query: str) -> str:
-    m = re.search(r"(?:to|in)\s+([A-Za-z\s]{2,30})", query, re.IGNORECASE)
+    q = query.strip()
+    # Strip months and seasons first so "Italy in July" doesn't capture "in"
+    m = re.search(
+        r"(?:to|visit|explore|travel to)\s+([A-Za-z\s,-]{2,30}?)(?=\s+(?:from|for|in\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|spring|summer|winter|autumn)|during|with|on|departing|under|budget|\.|\,|$))",
+        q,
+        re.IGNORECASE,
+    )
+    if not m:
+        m = re.search(r"(?:to|in)\s+([A-Za-z\s]{2,30})", q, re.IGNORECASE)
+
     if m:
-        return m.group(1).strip()
-    return query.strip()
+        dest = m.group(1).strip()
+        # Clean trailing prepositions like "in", "to", "for"
+        dest = re.sub(r"\s+(?:in|to|for|from|with|and|or)$", "", dest, flags=re.IGNORECASE).strip()
+        dest = re.sub(r"^(?:the|a|an)\s+", "", dest, flags=re.IGNORECASE).strip()
+        return dest
+
+    return q
 
 
 @cached(prefix="destination", ttl=CACHE_TTL_DESTINATION)

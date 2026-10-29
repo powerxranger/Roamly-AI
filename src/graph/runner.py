@@ -75,71 +75,151 @@ def _is_focused_followup(query: str) -> bool:
     return False
 
 
+def _extract_destination_hint(query: str) -> str:
+    """Extract destination name from query, stripping noise words."""
+    q = query.strip()
+    # Check for "in/for/to [Destination]"
+    m = re.search(
+        r"\b(?:in|for|to|around|visit|visiting)\s+([A-Za-z\s,-]{2,30}?)(?=\s+(?:from|with|during|departing|under|budget|\.|\,|$))",
+        q,
+        re.IGNORECASE,
+    )
+    if m:
+        cleaned = re.sub(
+            r"\b(get|freshest|dishes|transit|passes|guide|food|trip|plan|like|please|just)\b",
+            "",
+            m.group(1),
+            flags=re.IGNORECASE,
+        ).strip()
+        cleaned = re.sub(r"\s+(?:in|to|for|from|with)$", "", cleaned, flags=re.IGNORECASE).strip()
+        if len(cleaned) > 2:
+            return cleaned.title()
+
+    # Check for well-known destinations mentioned anywhere in query
+    dest_keywords = [
+        "Italy", "Rome", "Milan", "Florence", "Venice", "Paris", "France", "Tokyo", "Japan",
+        "London", "UK", "Barcelona", "Madrid", "Spain", "Bali", "Indonesia", "Thailand",
+        "Bangkok", "Dubai", "UAE", "Singapore", "New York", "USA", "Switzerland", "Zurich",
+        "Greece", "Athens", "Santorini", "Germany", "Berlin", "Munich", "Portugal", "Lisbon",
+        "Bulgaria", "Sofia", "Turkey", "Istanbul", "Georgia", "Tbilisi", "Almaty", "Kazakhstan"
+    ]
+    for d in dest_keywords:
+        if re.search(r"\b" + re.escape(d) + r"\b", q, re.IGNORECASE):
+            return d
+
+    return "your destination"
+
+
 def _generate_concierge_fallback(query: str) -> str:
     q = query.lower()
-    dest = "Almaty" if "almaty" in q else "the destination"
+    dest = _extract_destination_hint(query)
+    is_italy = bool(re.search(r"\b(italy|rome|florence|milan|venice|naples)\b", dest, re.IGNORECASE))
 
-    if re.search(r"\b(fish|seafood|trout|sushi)\b", q):
+    # 1. Transit & Transport Guide (Check first to avoid food collisions)
+    if re.search(r"\b(transit|metro|subway|bus|transport|passes|train|trains|ticket|tickets)\b", q):
+        if is_italy:
+            return (
+                f"### Public Transport & Transit Pass Guide for {dest}\n\n"
+                f"- **High-Speed & Regional Trains**: Book **Trenitalia (Frecciarossa)** or **Italo** for fast travel between major cities (Rome, Florence, Milan, Venice). Book 2–3 weeks early for 50%+ discounts.\n"
+                f"- **City Metro & Contactless Tap**: In Rome (Metro A & B) and Milan (M1–M5), simply tap your contactless credit card/Apple Pay at turnstiles (~€1.50–€2.20 per ride).\n"
+                f"- **Transit Passes**: Look into the **Roma Pass** (48/72h unlimited transit + museum access) or **MilanoCard** for unlimited subway, tram, and city bus rides.\n"
+                f"- **Crucial Local Rule**: Always validate paper bus/tram tickets in the yellow/orange stamping machine on board immediately to avoid spot fines (€50–€100).\n"
+                f"- **Ride Apps**: Official licensed white taxis (FreeNow app) are much more reliable and affordable than unmetered cabs."
+            )
         return (
-            f"### Top Fish & River Trout Spots in {dest}\n\n"
-            f"- **Alma-Arasan Trout Farm & Grill**: Mountain river fishery where fresh rainbow trout is caught on-site and grilled over charcoal with mountain herbs.\n"
-            f"- **Almatau Mountain Resort & Fish Bistro**: Fresh high-altitude river fish with scenic mountain views (~5,000–8,000 KZT / ₹900–₹1,400 per person).\n"
-            f"- **Ocean Basket & Seafood Hall**: Top urban seafood bistro serving grilled platters, calamari, and regional fish preparations.\n"
-            f"- **Insider Tip**: In mountain valleys like Alma-Arasan, you can fish your own trout and have the chefs prepare it immediately with shashlik spices."
+            f"### Public Transport & Transit Pass Guide for {dest}\n\n"
+            f"- **City Metro & Rapid Transit**: Most metropolitan lines support contactless credit card / phone tap at the gates for instant travel without buying paper tickets.\n"
+            f"- **Day & Multi-Day Passes**: If taking 3+ rides per day, 24h or 72h unlimited transit visitor passes yield significant savings (~30–45% off single fares).\n"
+            f"- **Official Ride-Hailing Apps**: Download the region's preferred ride app (Uber, FreeNow, or Bolt) before arriving to guarantee transparent metered rates.\n"
+            f"- **Airport Express Transfers**: Dedicated airport trains or express airport shuttle buses are usually 3x faster and significantly cheaper than highway taxis.\n"
+            f"- **Practical Tip**: Always validate transit tickets prior to boarding or keep your tap receipt to avoid random conductor inspection fines."
         )
 
-    if re.search(r"\b(street food|food|budget eats|dishes|cuisine)\b", q):
+    # 2. Food & Dining
+    if re.search(r"\b(food|street food|eat|eats|dishes|cuisine|restaurant|restaurants|cafe|dining)\b", q):
+        if is_italy:
+            return (
+                f"### Authentic Local Dining & Food Guide for {dest}\n\n"
+                f"- **Authentic Trattorias & Osterias**: Skip restaurants with multilingual photo menus near tourist monuments. Look for family-run *Trattorie* with daily handwritten chalkboards.\n"
+                f"- **Iconic Specialties**: Savor authentic Pasta alla Carbonara, Cacio e Pepe, Neapolitan wood-fired pizza, and fresh artisanal Gelato (look for natural colors in metal tins, not neon mounds).\n"
+                f"- **Aperitivo Culture**: Between 6:30 PM and 8:30 PM, enjoy an Aperol Spritz or Negroni served with complimentary cured meats, cheeses, and focaccia snacks (€8–€12).\n"
+                f"- **Budget & Pricing**: Casual trattoria meals run €15–€28 (₹1,400–₹2,500) per person. Note that bread/table service (*coperto*) of €1.50–€3 is standard.\n"
+                f"- **Coffee Etiquette**: Order your espresso standing at the bar (*al banco*) for €1.20–€1.50 instead of sitting at outdoor square tables."
+            )
         return (
-            f"### Authentic Local Food & Street Eats in {dest}\n\n"
-            f"- **Zelyony Bazar (Green Bazaar)**: Head to the upper floor for steaming tandoor samsas, horsemeat delicacies (kazy), fresh kurt cheese, and dried fruits.\n"
-            f"- **Kaganat Canteen**: Famous 24/7 self-service local dining chain serving piping hot Lagman noodles, Plov, and Borscht at very budget-friendly prices (₹300–₹600 / $4–$7).\n"
-            f"- **Arbat Street Kiosks**: Shashlik skewers, fresh chebureki, and freshly baked baursak dough balls.\n"
-            f"- **Insider Tip**: Always pair heavy meat dishes with traditional black tea and mountain honey or dried herbs."
+            f"### Authentic Local Dining & Culinary Guide for {dest}\n\n"
+            f"- **Local Food Markets & Bazaars**: Visit central food halls and morning markets for the freshest regional specialties, pastries, and authentic street eats.\n"
+            f"- **Neighborhood Eateries**: Seek out busy spots frequented by locals 2-3 blocks away from primary tourist monuments.\n"
+            f"- **Pricing Expectations**: High-quality street food and casual local dining typically ranges from $7–$18 (₹600–₹1,600) per person.\n"
+            f"- **Dining Etiquette & Timing**: Dine according to local hours (e.g. lunch 1:00–2:30 PM, dinner 7:30–9:30 PM) to ensure dishes are cooked to order."
         )
 
-    if re.search(r"\b(transit|metro|subway|bus|transport)\b", q):
+    # 3. Rainy Day & Indoor Backup Activities
+    if re.search(r"\b(rain|rainy|bad weather|indoor|museum|museums)\b", q):
+        if is_italy:
+            return (
+                f"### Rainy Day & Indoor Culture Guide for {dest}\n\n"
+                f"- **World-Class Art Galleries & Museums**: Spend rainy hours sheltered in iconic venues like the Vatican Museums, Galleria Borghese, the Uffizi Gallery, or Galleria dell'Accademia.\n"
+                f"- **Historic Covered Markets**: Stroll through atmospheric covered food halls like **Mercato Centrale** for wine tasting, artisanal cheeses, and hot pasta.\n"
+                f"- **Historic Basilicas & Cathedrals**: Marvel at interior frescoes, marble mosaics, and renaissance architecture inside magnificent cathedrals.\n"
+                f"- **Opera & Classical Concerts**: Reserve evening tickets for an orchestral concert or opera performance in historic theaters.\n"
+                f"- **Tip**: Book museum skip-the-line tickets online early, as indoor attractions fill up quickly on rainy days."
+            )
         return (
-            f"### Public Transport Guide & Transit Tips for {dest}\n\n"
-            f"- **Metro System**: Single modern 11-station line. Spotless stations (especially Zhibek Zholy and Baikonur) with artwork. Single ride is ~100 KZT (~₹18 / $0.20).\n"
-            f"- **Onay Transit Card / QR**: Buy an Onay transport card at metro stations or use QR codes inside buses for discounted fares.\n"
-            f"- **Ride-Hailing Apps**: Download Yandex Go before traveling. Rides within the central district typically cost 800–1,500 KZT ($1.80–$3.20).\n"
-            f"- **Airport Transfer**: Never take unmetered curbside taxis. Book directly via Yandex Go (usually ~3,500–5,000 KZT / $8–$11)."
+            f"### Rainy Day & Indoor Backup Itinerary for {dest}\n\n"
+            f"- **Premier National Museums & Art Galleries**: Explore prominent regional history and fine arts collections with comfortable indoor climate control.\n"
+            f"- **Indoor Food Halls & Artisanal Markets**: Taste local coffees, pastries, and regional delicacies sheltered from the weather.\n"
+            f"- **Historic Spas & Wellness Centers**: Enjoy regional bathhouses, thermal springs, or wellness centers.\n"
+            f"- **Shopping Arcades & Cultural Centers**: Visit historic glass-domed gallerias or contemporary arts complexes.\n"
+            f"- **Tip**: Reserve museum entry tickets online in advance to bypass outdoor standby queues in wet weather."
         )
 
-    if re.search(r"\b(scam|scams|safety|safe|emergency)\b", q):
+    # 4. Safety Tips & Scams to Avoid
+    if re.search(r"\b(scam|scams|safety|safe|emergency|pickpocket)\b", q):
+        if is_italy:
+            return (
+                f"### Safety Tips & Scams to Avoid in {dest}\n\n"
+                f"- **Metro & Landmark Pickpockets**: Be vigilant around crowded metro stations (Termini, Colosseo, Duomo) and public buses (e.g. Rome Bus 64). Keep bags zipped in front of you.\n"
+                f"- **Friendship Bracelet & Rose Touts**: Strangers offering to tie a 'free' woven bracelet on your wrist or hand you a rose, then aggressively demanding €10–€20. Firmly say 'No grazie' and walk on.\n"
+                f"- **Unofficial Airport Taxis**: Only take official white municipal taxis with roof signs and fixed airport rates displayed on the door (€50–€55 for Rome Fiumicino, €100 for Milan Malpensa).\n"
+                f"- **Restaurant 'Catch of the Day' Trap**: Confirm fish or steak pricing per 100g (*all'etto*) before ordering to avoid surprise €150+ bills.\n"
+                f"- **Emergency Numbers**: Call **112** for all emergency services (Police, Medical, Fire) across Italy and the EU."
+            )
         return (
-            f"### Safety Tips & Travel Scams to Avoid in {dest}\n\n"
-            f"- **Airport Gypsy Taxis**: Unofficial drivers charging 5x–10x normal rates. Ignore aggressive terminal touts and use the Yandex Go app.\n"
-            f"- **Green Bazaar Currency Exchange**: Stick to official banks or licensed exchange booths along Dostyk and Abay Avenues rather than street touts.\n"
-            f"- **Bird / Mascot Photo Traps**: Handlers placing falcons or pigeons on your shoulder on Panfilov or Kok-Tobe, then demanding exorbitant fees.\n"
-            f"- **Emergency Numbers**: 112 for general emergencies, 102 for Police, 103 for Ambulance."
+            f"### Safety Tips & Travel Awareness for {dest}\n\n"
+            f"- **Luggage & Pocket Awareness**: Use front-facing cross-body bags or zipped interior pockets in crowded transit hubs and tourist plazas.\n"
+            f"- **Curbside Taxi Touts**: Always ignore unofficial drivers soliciting rides inside terminal arrivals. Use designated taxi ranks or verified ride-hailing apps.\n"
+            f"- **Currency & ATMs**: Withdraw cash only from official bank ATMs located inside bank vestibules, avoiding standalone street machines with high conversion markups.\n"
+            f"- **Emergency Contact**: Standard national emergency numbers can be dialed toll-free from any local or roaming mobile phone."
         )
 
-    if re.search(r"\b(photo|photogenic|instagram|viewpoint)\b", q):
+    # 5. Photogenic Sights & Viewpoints
+    if re.search(r"\b(photo|photogenic|instagram|viewpoint|views|spots)\b", q):
+        if is_italy:
+            return (
+                f"### 5 Most Photogenic & Iconic Sights in {dest}\n\n"
+                f"- **Panoramic City Viewpoints**: Watch the sunset bathed in golden hour light over ancient terracotta rooftops and historic domes.\n"
+                f"- **Historic Cobblestone Alleys**: Wander charming backstreets draped in ivy with vintage scooters and flower-laden balconies.\n"
+                f"- **Monumental Piazzas**: Photograph grand fountains and baroque marble facades in early morning light before crowds gather.\n"
+                f"- **Scenic Waterfronts & Bridges**: Capture historic stone bridges spanning river reflections at dusk.\n"
+                f"- **Insider Tip**: The best light for photography is during the 45 minutes right after sunrise, offering empty streets and warm soft lighting."
+            )
         return (
-            f"### 5 Most Photogenic & Iconic Photo Spots in {dest}\n\n"
-            f"- **Kok-Tobe Hill**: Breathtaking sunset panorama overlooking the entire city and the snow-capped Tian Shan mountain backdrop.\n"
-            f"- **Zenkov (Ascension) Cathedral**: Stunning multicolor wooden cathedral built entirely without metal nails, set in Panfilov Park.\n"
-            f"- **Big Almaty Lake (BAO)**: Turquoise glacial lake surrounded by majestic 4,000m peaks (best visited in the morning).\n"
-            f"- **Medeu & Shymbulak Cableway**: Dramatic aerial photos from the gondola ascending over high-altitude alpine ridges.\n"
-            f"- **Charyn Canyon 'Valley of Castles'**: Striking red sandstone cliffs and dramatic natural formations."
+            f"### 5 Most Photogenic & Scenic Viewpoints in {dest}\n\n"
+            f"- **Summit & Skyline Panoramas**: Visit high-elevation lookouts, tower observatories, or hilltop parks for sweeping views of the city.\n"
+            f"- **Historic Architectural Landmarks**: Capture dramatic heritage facades, intricate arches, and monuments.\n"
+            f"- **Vibrant Cultural Squares**: Capture lively central plazas, colorful street art districts, and evening lantern-lit streets.\n"
+            f"- **Lakeside or River Promenades**: Scenic waterfront walks with bridge reflections and evening illumination.\n"
+            f"- **Insider Tip**: Visit major open-air viewpoints during golden hour (just before sunset) for optimal natural lighting."
         )
 
-    if re.search(r"\b(rain|rainy|bad weather|indoor)\b", q):
-        return (
-            f"### Rainy Day & Bad Weather Backup Itinerary in {dest}\n\n"
-            f"- **Central State Museum of Kazakhstan**: Massive historic collection covering nomadic archaeology, gold warriors, and Soviet history.\n"
-            f"- **Arasan Baths & Spa**: Historic architectural thermal bathhouse offering Finnish, Russian, and Turkish steam rooms.\n"
-            f"- **Dostyk Plaza & Mega Center**: Modern indoor lifestyle complexes with authentic Kazakh dining halls, cinema, and shopping.\n"
-            f"- **A. Kasteyev State Museum of Arts**: Premier national art museum showcasing Central Asian masters and traditional tapestries."
-        )
-
+    # Default general response tailored to destination
     return (
-        f"### Insider Recommendations for '{query.strip()}'\n\n"
-        f"- **Top Venues & Spots**: Explore the highest-rated local dining venues and authentic regional kitchens.\n"
-        f"- **Local Specialties**: Look for regional delicacies, mountain trout/fresh river fish spots, or seasonal specialties.\n"
-        f"- **Realistic Budget**: Casual meals typically cost $6–$15 (₹500–₹1,200) per person.\n"
-        f"- **Practical Tip**: Head out during off-peak dining hours (1:00 PM for lunch, 7:00 PM for dinner) to get the freshest dishes without wait times."
+        f"### Curated Insider Recommendations for {dest}\n\n"
+        f"- **Top Venues & Landmarks**: Explore the most iconic heritage sites, neighborhood squares, and authentic local experiences in {dest}.\n"
+        f"- **Authentic Local Dining**: Dine where residents eat—sample regional dishes, seasonal specialties, and neighborhood food halls.\n"
+        f"- **Practical Budget**: Expect casual dining to average $15–$30 (₹1,200–₹2,500) per person.\n"
+        f"- **Insider Advice**: Plan visits to popular attractions early in the morning (before 10:00 AM) to experience them peacefully without long lines."
     )
 
 

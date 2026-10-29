@@ -1295,6 +1295,409 @@ svg { width: 1em; height: 1em; display: block; }
   color: var(--accent-text);
 }
 
+/* ============================================================
+   Interactive Trip Overview Tiles & Quick Nav
+   ============================================================ */
+
+.interactive-tile {
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+              border-color 0.22s ease,
+              box-shadow 0.22s ease,
+              background 0.22s ease;
+}
+
+.interactive-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent) !important;
+  box-shadow: 0 6px 20px var(--accent-soft);
+  background: var(--surface) !important;
+}
+
+.tile-action-chip {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: var(--surface-solid);
+  color: var(--accent-text);
+  border: 1px solid var(--border-strong);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  transition: all 0.2s ease;
+}
+
+.interactive-tile:hover .tile-action-chip {
+  background: var(--accent);
+  color: #04121a;
+  border-color: var(--accent);
+}
+
+/* Travellers Interactive Stepper */
+.travellers-tile {
+  cursor: default;
+}
+
+.travellers-tile:hover {
+  transform: none;
+}
+
+.traveller-stepper-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--surface-solid);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.stepper-btn:hover {
+  background: var(--accent);
+  color: #04121a;
+  border-color: var(--accent);
+}
+
+.stepper-btn:active {
+  transform: scale(0.92);
+}
+
+.stepper-count-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-text);
+  min-width: 65px;
+}
+
+/* Quick Navigation Anchor Bar */
+.trip-quick-nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.quick-nav-label {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.quick-nav-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quick-nav-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.quick-nav-chip:hover {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+/* Jump Flash Highlight Animation */
+.section-highlight {
+  animation: sectionGlow 1.6s ease-out;
+}
+
+@keyframes sectionGlow {
+  0% { box-shadow: 0 0 0 4px var(--accent), 0 0 30px var(--accent-soft); }
+  100% { box-shadow: none; }
+}
+
+/* ============================================================
+   Enhanced Packing Checklist & Dark Mode Fixes
+   ============================================================ */
+
+.packing-card-enhanced {
+  border: 1px solid var(--border-strong) !important;
+}
+
+.packing-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.packing-progress-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.packing-progress-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.packing-counter-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 750;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  color: var(--accent-text) !important;
+  border: 1px solid var(--accent);
+}
+
+.packing-progress-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text) !important;
+}
+
+.packing-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.packing-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--surface-solid) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border-strong) !important;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.packing-action-btn:hover {
+  background: var(--surface) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent-text) !important;
+}
+
+.packing-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.packing-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.3s ease;
+}
+
+/* Category Filter Tabs */
+.packing-category-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 14px;
+  scrollbar-width: thin;
+}
+
+.packing-cat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+}
+
+.packing-cat-tab:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.packing-cat-tab.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+
+/* Custom Item Adder Form */
+.packing-add-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.packing-add-input {
+  flex: 1;
+  padding: 9px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.18s ease;
+}
+
+.packing-add-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.packing-add-btn {
+  padding: 0 16px;
+  font-weight: 600;
+}
+
+/* Categorized Checklist Grid */
+.packing-categories-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.packing-category-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.packing-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-solid);
+}
+
+.packing-category-header strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.packing-category-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.packing-items-list {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  gap: 4px;
+}
+
+.packing-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.packing-item-row:hover {
+  background: var(--surface);
+}
+
+.packing-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.packing-item-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+  flex: 1;
+}
+
+.packing-item-row.packed .packing-item-text {
+  text-decoration: line-through;
+  color: var(--text-muted);
+  opacity: 0.65;
+}
+
+.packing-check-icon {
+  font-size: 12px;
+  font-weight: 800;
+  color: #10b981;
+}
+
+.packing-copy-btn {
+  margin-left: auto;
+}
+
 @media (max-width: 900px) {
   .topbar { padding: 10px 14px; gap: 8px; }
   .conversation { padding: 0 16px; }

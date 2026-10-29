@@ -337,9 +337,9 @@ User Question:
 {user_query}
 
 Provide an expert concierge guide that strictly adheres to these rules:
-1. Curated & Specific: Provide 3 to 5 top recommendations (e.g., top 3-5 venues, food spots, local specialties, budget distributions, or safety tips).
-2. Local Equivalents: If the user asks about something specific (like seafood or fish in a landlocked mountain city such as Almaty), highlight the best local equivalents—such as mountain river trout farms (Alma-Arasan, Almatau), specialized fish bistros, or regional culinary gems.
-3. Pricing & Transit: Give realistic cost ranges in local currency and USD/INR. Name 1-2 practical transit tips or metro lines if relevant. Never list endless bus numbers.
+1. Exact Destination Awareness: Identify the destination mentioned in the user question (e.g. Italy, Rome, Tokyo, Paris, Bali, New York, etc.) and give 100% accurate, authentic recommendations specifically for that destination. NEVER recommend spots from an unrelated city or country.
+2. Curated & Specific: Provide 3 to 5 top recommendations (e.g., top 3-5 venues, food spots, local specialties, transport passes, or safety tips) authentic to that destination.
+3. Realistic Pricing & Transit: Give realistic cost ranges in local currency and USD/INR. Name 1-2 practical transit tips or metro passes if relevant.
 4. Formatting: Use clean Markdown (bullet points, bold highlights, or concise tables). Do NOT use raw HTML tags (e.g. no <br>, <table>, or <div> tags).
-5. Length: Keep the total response punchy, practical, and under 350 words.
+5. Length: Keep the total response punchy, practical, engaging, and under 350 words.
 """
