@@ -1,24 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "bash scripts/build-frontend.sh",
-  "outputDirectory": "dist",
-  "framework": null,
+  "buildCommand": "cd client && npm install && npm run build",
+  "outputDirectory": "client/dist",
+  "framework": "vite",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://roamly-ai-v6kv.onrender.com/api/:path*"
-    },
-    {
-      "source": "/health",
-      "destination": "https://roamly-ai-v6kv.onrender.com/health"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/static/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

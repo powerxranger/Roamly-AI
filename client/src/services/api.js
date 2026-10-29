@@ -3,16 +3,27 @@
  * Includes automatic Render cold-start detection, retry, and direct fallback.
  */
 
-const RENDER_DIRECT_URL = "https://roamly-ai-v6kv.onrender.com"
+// Configurable backend URL via Vercel environment variable (VITE_API_URL)
+// e.g. "https://roamly-backend.onrender.com"
+const BACKEND_URL = (
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_BACKEND_URL ||
+  ''
+).replace(/\/+$/, '')
 
-// When deployed on Vercel, the primary route is /api (proxied via vercel.json)
-// with direct fallback to Render if Vercel's proxy returns non-JSON/HTML.
 function getApiUrls(endpoint) {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-  return [
-    cleanEndpoint, // 1st try: same-origin or Vercel rewrite
-    `${RENDER_DIRECT_URL}${cleanEndpoint}` // 2nd try: direct Render backend with CORS
-  ]
+  const urls = []
+
+  // 1. Direct Render Backend URL (if configured in Vercel environment)
+  if (BACKEND_URL) {
+    urls.push(`${BACKEND_URL}${cleanEndpoint}`)
+  }
+
+  // 2. Relative path (for local Vite proxy or Vercel rewrites)
+  urls.push(cleanEndpoint)
+
+  return urls
 }
 
 async function requestWithFallback(endpoint, options = {}) {
@@ -93,15 +104,14 @@ export async function planTravel(message, threadId = null) {
 }
 
 export async function checkHealth() {
-  try {
-    const res = await fetch("/health", { cache: "no-store", credentials: "include" })
-    return res.ok
-  } catch (e) {
+  const urls = BACKEND_URL ? [`${BACKEND_URL}/health`, '/health'] : ['/health']
+  for (const u of urls) {
     try {
-      const res2 = await fetch(`${RENDER_DIRECT_URL}/health`, { cache: "no-store", credentials: "include" })
-      return res2.ok
-    } catch (e2) {
-      return false
+      const res = await fetch(u, { cache: "no-store", credentials: "include" })
+      if (res.ok) return true
+    } catch (e) {
+      // continue to next URL
     }
   }
+  return false
 }

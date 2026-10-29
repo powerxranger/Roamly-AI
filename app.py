@@ -36,6 +36,7 @@ nest_asyncio.apply()
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 DIST_DIR = BASE_DIR / "dist"
+CLIENT_DIST_DIR = BASE_DIR / "client" / "dist"
 
 app = FastAPI(
     title="Roamly AI",
@@ -44,16 +45,15 @@ app = FastAPI(
 )
 
 
-# Only needed when the browser talks to this API on a different origin. With
-# the Vercel rewrite the frontend is same-origin, so this stays inactive.
-if CORS_ORIGINS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=CORS_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type"],
-    )
+# Enable CORS for Vercel frontend deployments, local development, and custom domains
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS if CORS_ORIGINS else ["*"],
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 app.mount(
@@ -62,7 +62,13 @@ app.mount(
     name="static"
 )
 
-if (DIST_DIR / "assets").exists():
+if (CLIENT_DIST_DIR / "assets").exists():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(CLIENT_DIST_DIR / "assets")),
+        name="client-assets"
+    )
+elif (DIST_DIR / "assets").exists():
     app.mount(
         "/assets",
         StaticFiles(directory=str(DIST_DIR / "assets")),
@@ -108,17 +114,36 @@ def _set_session_cookie(response: Response, session_id: str) -> None:
 
 
 
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    if (DIST_DIR / "index.html").exists():
-        with open(DIST_DIR / "index.html", "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+@app.get("/")
+async def root(request: Request):
+    """
+    Root route:
+    - If accessed from a web browser locally and the React build exists, serve the UI.
+    - Otherwise (on Render backend or API calls), return the JSON API status.
+    """
+    accept = request.headers.get("accept", "")
+    is_browser = "text/html" in accept
 
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={}
-    )
+    if is_browser:
+        # 1. Check for built React SPA in client/dist
+        if (CLIENT_DIST_DIR / "index.html").exists():
+            with open(CLIENT_DIST_DIR / "index.html", "r", encoding="utf-8") as f:
+                return HTMLResponse(content=f.read())
+        # 2. Check for built React SPA in dist
+        if (DIST_DIR / "index.html").exists():
+            with open(DIST_DIR / "index.html", "r", encoding="utf-8") as f:
+                return HTMLResponse(content=f.read())
+        # 3. Check for legacy frontend templates
+        if (FRONTEND_DIR / "templates" / "index.html").exists():
+            return templates.TemplateResponse(request=request, name="index.html", context={})
+
+    return {
+        "service": "Roamly AI Multi-Agent Travel Planner API",
+        "status": "online",
+        "docs": "/docs",
+        "health": "/health",
+        "frontend_dev_url": "http://localhost:5173",
+    }
 
 
 # =========================

@@ -1,0 +1,11 @@
+{
+  "name": "roamly-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Roamly AI - Autonomous Multi-Agent Travel Planner",
+  "scripts": {
+    "start": "python dev.py",
+    "dev": "python dev.py",
+    "build": "cd client && npm run build"
+  }
+}
