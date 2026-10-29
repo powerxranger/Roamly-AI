@@ -1,19 +1,18 @@
 import React from 'react'
 
 export default function Header({
-  apiStatus,
-  onOpenSettings,
+  onOpenPreferences,
   onNewTrip,
   theme,
-  onToggleTheme
+  onToggleTheme,
+  currency = 'INR'
 }) {
-  const getStatusText = () => {
-    switch (apiStatus) {
-      case 'ok': return 'API connected'
-      case 'setup': return 'No Live API'
-      case 'down': return 'Backend down'
-      default: return 'Checking…'
-    }
+  const currencySymbols = {
+    INR: '₹',
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+    JPY: '¥'
   }
 
   return (
@@ -31,15 +30,16 @@ export default function Header({
       </a>
 
       <div className="topbar-actions">
+        {/* Interactive Trip Preferences & Currency Switcher */}
         <button
-          className="status"
-          data-state={apiStatus}
+          className="btn btn-soft btn-sm btn-pref-trigger"
+          onClick={onOpenPreferences}
           type="button"
-          onClick={onOpenSettings}
-          title="Open settings"
+          title="Trip Customizer, Currency & Aesthetics"
         >
-          <span className="status-dot"></span>
-          <span className="status-text">{getStatusText()}</span>
+          <span className="pref-btn-icon">✨</span>
+          <span className="btn-label">Preferences</span>
+          <span className="currency-pill">{currencySymbols[currency] || currency}</span>
         </button>
 
         <button className="btn btn-soft btn-sm" onClick={onNewTrip} type="button">
@@ -47,13 +47,6 @@ export default function Header({
             <path d="M12 5v14M5 12h14" />
           </svg>
           <span className="btn-label">New trip</span>
-        </button>
-
-        <button className="icon-btn" onClick={onOpenSettings} type="button" aria-label="Settings" title="Settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
-          </svg>
         </button>
 
         <button className="icon-btn" onClick={onToggleTheme} type="button" aria-label="Toggle colour theme" title="Toggle theme">

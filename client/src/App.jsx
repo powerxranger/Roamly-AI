@@ -8,10 +8,14 @@ import PlanResult from './components/PlanResult'
 import ConciergeResult from './components/ConciergeResult'
 import ErrorMessage from './components/ErrorMessage'
 import SettingsModal from './components/SettingsModal'
+import PreferencesModal from './components/PreferencesModal'
 import Toast from './components/Toast'
 import { fetchConfig, planTravel } from './services/api'
 
 const THEME_KEY = 'travelbrain.theme'
+const ACCENT_KEY = 'travelbrain.accent'
+const CURRENCY_KEY = 'travelbrain.currency'
+const PACE_KEY = 'travelbrain.pace'
 
 export default function App() {
   // Theme state
@@ -25,12 +29,45 @@ export default function App() {
     return prefersLight ? 'light' : 'dark'
   })
 
+  // Accent theme color
+  const [themeColor, setThemeColor] = useState(() => {
+    try {
+      const stored = localStorage.getItem(ACCENT_KEY)
+      if (stored) return stored
+    } catch (e) {}
+    return 'emerald'
+  })
+
+  // User preferences: currency & trip pace
+  const [currency, setCurrency] = useState(() => {
+    try {
+      const stored = localStorage.getItem(CURRENCY_KEY)
+      if (stored) return stored
+    } catch (e) {}
+    return 'INR'
+  })
+
+  const [pace, setPace] = useState(() => {
+    try {
+      const stored = localStorage.getItem(PACE_KEY)
+      if (stored) return stored
+    } catch (e) {}
+    return 'balanced'
+  })
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     try {
       localStorage.setItem(THEME_KEY, theme)
     } catch (e) {}
   }, [theme])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-accent', themeColor)
+    try {
+      localStorage.setItem(ACCENT_KEY, themeColor)
+    } catch (e) {}
+  }, [themeColor])
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
@@ -70,6 +107,7 @@ export default function App() {
   const [input, setInput] = useState('')
   const [isBuilderOpen, setIsBuilderOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false)
 
   // Toast state
   const [toastMessage, setToastMessage] = useState('')
@@ -163,7 +201,7 @@ export default function App() {
   const handleFocusInput = () => {
     if (!isReady) {
       showToast('No live API — add your keys first.')
-      setIsSettingsOpen(true)
+      setIsPreferencesOpen(true)
       return
     }
     const inputEl = document.querySelector('.composer textarea')
@@ -185,13 +223,13 @@ export default function App() {
 
       <div className="layout">
         <main className="main">
-          {/* Header */}
+          {/* Header without technical API status/settings button */}
           <Header
-            apiStatus={apiStatus}
-            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenPreferences={() => setIsPreferencesOpen(true)}
             onNewTrip={handleNewTrip}
             theme={theme}
             onToggleTheme={toggleTheme}
+            currency={currency}
           />
 
           {/* Conversation container */}
@@ -280,7 +318,41 @@ export default function App() {
         </main>
       </div>
 
-      {/* Settings Modal */}
+      {/* Interactive Trip Preferences & Style Customizer Modal */}
+      <PreferencesModal
+        isOpen={isPreferencesOpen}
+        onClose={() => setIsPreferencesOpen(false)}
+        currency={currency}
+        onSelectCurrency={(c) => {
+          setCurrency(c)
+          try {
+            localStorage.setItem(CURRENCY_KEY, c)
+          } catch (e) {}
+          showToast(`Currency set to ${c}`)
+        }}
+        pace={pace}
+        onSelectPace={(p) => {
+          setPace(p)
+          try {
+            localStorage.setItem(PACE_KEY, p)
+          } catch (e) {}
+          showToast(`Trip pacing set to ${p}`)
+        }}
+        themeColor={themeColor}
+        onSelectThemeColor={(col) => {
+          setThemeColor(col)
+          try {
+            localStorage.setItem(ACCENT_KEY, col)
+          } catch (e) {}
+          showToast(`Theme accent updated`)
+        }}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        config={config}
+        onOpenDevSettings={() => setIsSettingsOpen(true)}
+      />
+
+      {/* Developer Settings Modal (Accessible via Preferences if keys needed) */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
