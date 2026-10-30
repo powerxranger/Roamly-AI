@@ -13,10 +13,42 @@ function isGreetingOrBanter(str) {
   )
 }
 
+function isOutOfTheBoxOrMeta(str) {
+  if (!str) return false
+  const s = String(str).toLowerCase().trim()
+  return (
+    /\bintroduce\s+(?:your|ur)self\b/i.test(s) ||
+    /\bwho\s+(?:are|r)\s+(?:you|u)\b/i.test(s) ||
+    /\bwhat\s+(?:are|r)\s+(?:you|u)\b/i.test(s) ||
+    /\bwhat\s+is\s+roamly\b/i.test(s) ||
+    /\btell\s+me\s+about\s+(?:your|ur)self\b/i.test(s) ||
+    /\bwhat\s+can\s+(?:you|u)\s+do\b/i.test(s) ||
+    /\bwhat\s+do\s+(?:you|u)\s+do\b/i.test(s) ||
+    /\b(?:your|ur)\s+capabilities\b/i.test(s) ||
+    /\bhow\s+do\s+(?:you|u)\s+work\b/i.test(s) ||
+    /\bwho\s+(?:made|created)\s+(?:you|u)\b/i.test(s) ||
+    /\btell\s+me\s+a\s+joke\b/i.test(s) ||
+    /\bwhy\s+do\s+people\s+travel\b/i.test(s)
+  )
+}
+
+function isIncomprehensibleOrIrrelevant(str) {
+  if (!str) return true
+  const s = String(str).toLowerCase().replace(/[?!.,;:@#$%^&*()_+=/\-\[\]{}|~`'"]+/g, '').trim()
+  if (!s) return true
+  if (/\b(?:asdf|asdfgh|asdfghjkl|qwerty|qwertyuiop|zxcv|zxcvbnm|kjsd|lkjh|poiuy)\b/i.test(s)) return true
+  const letters = s.replace(/[^a-z]/g, '')
+  if (letters.length >= 5) {
+    if (!/[aeiouy]/.test(letters)) return true
+    if (/(.)\1{4,}/.test(letters)) return true
+  }
+  return false
+}
+
 function cleanDestName(str) {
   if (!str) return null
   let s = String(str).trim()
-  if (isGreetingOrBanter(s) || /[?!@#$%*_]/.test(s)) return null
+  if (isGreetingOrBanter(s) || isOutOfTheBoxOrMeta(s) || isIncomprehensibleOrIrrelevant(s) || /[?!@#$%*_]/.test(s)) return null
   s = s
     .replace(/\b(?:like|maybe|please|just|wanna|want|plan|trip|vacation|getaway|explore|visit|looking for|help me|going to|travel to|chaos|free time|locate me to|locate me|calm place in|calm places in|peaceful place in|quiet place in|some place in|place in|spots in|places in|away from)\b/gi, '')
     .replace(/^(?:the|a|an|in|to|from|at|near|for|around|of)\s+/i, '')
@@ -26,7 +58,7 @@ function cleanDestName(str) {
   if (
     s.length < 2 ||
     s.length > 30 ||
-    /\b(?:chaos|wanna|free time|locate|how|its|it's|going|bro|hey|hello|doing|asking|what|where|why|your|destination|custom)\b/i.test(s)
+    /\b(?:chaos|wanna|free time|locate|how|its|it's|going|bro|hey|hello|doing|asking|what|where|why|your|destination|custom|introduce|yourself|urself)\b/i.test(s)
   ) return null
   return s || null
 }
@@ -34,11 +66,7 @@ function cleanDestName(str) {
 function extractDestination(text) {
   if (!text) return null
   const t = String(text)
-  if (isGreetingOrBanter(t)) {
-    const majors = ["Saudi Arabia", "AlUla", "Riyadh", "Jeddah", "Abha", "Farasan Islands", "Dubai", "UAE", "Abu Dhabi", "Japan", "Tokyo", "Kyoto", "Osaka", "Bali", "Paris", "Rome", "Italy", "Switzerland", "London"]
-    for (const m of majors) {
-      if (new RegExp(`\\b${m}\\b`, 'i').test(t)) return m
-    }
+  if (isGreetingOrBanter(t) || isOutOfTheBoxOrMeta(t) || isIncomprehensibleOrIrrelevant(t)) {
     return null
   }
 
@@ -72,22 +100,30 @@ function extractDestination(text) {
 }
 
 export default function ConciergeResult({ result, onFollowup, onToast }) {
-  const isGreeting = isGreetingOrBanter(result.__query)
-  const cleanExplicit = cleanDestName(result.destination)
-  let dest = (cleanExplicit && !/your destination/i.test(cleanExplicit) ? cleanExplicit : null)
+  const queryText = result.__query || ''
+  const isGreeting = isGreetingOrBanter(queryText)
+  const isMeta = isOutOfTheBoxOrMeta(queryText)
+  const isIrrelevant = isIncomprehensibleOrIrrelevant(queryText)
+  const isNonDestinationQuery = isGreeting || isMeta || isIrrelevant || result.destination === ''
 
-  if (!dest && !isGreeting) {
-    dest = extractDestination(result.__query) || extractDestination(result.answer)
-  }
+  let dest = null
 
-  // If query explicitly names a known destination:
-  if (!dest && result.__query) {
-    const q = result.__query.toLowerCase()
-    if (/\bsaudi\b|\balula\b|\briyadh\b|\bjaddah\b|\babha\b/i.test(q)) dest = 'Saudi Arabia'
-    else if (/\bdubai\b|\buae\b|\babu dhabi\b/i.test(q)) dest = 'Dubai'
-    else if (/\bjapan\b|\btokyo\b|\bkyoto\b|\bosaka\b/i.test(q)) dest = 'Japan'
-    else if (/\bitaly\b|\brome\b|\bflorence\b|\bvenice\b/i.test(q)) dest = 'Italy'
-    else if (/\bswitzerland\b|\bswiss\b|\bzurich\b/i.test(q)) dest = 'Switzerland'
+  if (!isNonDestinationQuery) {
+    const cleanExplicit = cleanDestName(result.destination)
+    if (cleanExplicit && !/your destination/i.test(cleanExplicit)) {
+      dest = cleanExplicit
+    }
+    if (!dest) {
+      dest = extractDestination(queryText)
+    }
+    if (!dest && queryText) {
+      const q = queryText.toLowerCase()
+      if (/\bsaudi\b|\balula\b|\briyadh\b|\bjaddah\b|\babha\b/i.test(q)) dest = 'Saudi Arabia'
+      else if (/\bdubai\b|\buae\b|\babu dhabi\b/i.test(q)) dest = 'Dubai'
+      else if (/\bjapan\b|\btokyo\b|\bkyoto\b|\bosaka\b/i.test(q)) dest = 'Japan'
+      else if (/\bitaly\b|\brome\b|\bflorence\b|\bvenice\b/i.test(q)) dest = 'Italy'
+      else if (/\bswitzerland\b|\bswiss\b|\bzurich\b/i.test(q)) dest = 'Switzerland'
+    }
   }
 
   const handleCopy = () => {

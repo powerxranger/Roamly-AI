@@ -39,15 +39,77 @@ function formatConvertedNumber(val, curr) {
   return '0'
 }
 
-function getCurrencyFromToken(tok, fallback) {
+function getCurrencyFromToken(tok, fallback = 'INR') {
   if (!tok) return fallback
-  const t = tok.trim()
-  if (t === '₹' || /^Rs\.?$/i.test(t) || /^INR$/i.test(t)) return 'INR'
-  if (t === '$' || /^USD$/i.test(t)) return 'USD'
-  if (t === '€' || /^EUR$/i.test(t)) return 'EUR'
-  if (t === '£' || /^GBP$/i.test(t)) return 'GBP'
-  if (t === '¥' || /^JPY$/i.test(t)) return 'JPY'
+  const t = tok.trim().toLowerCase()
+  if (t === '₹' || /^rs\.?$/i.test(t) || /^inr$/i.test(t) || /rupee/i.test(t) || /lakh/i.test(t)) return 'INR'
+  if (t === '$' || /^usd$/i.test(t) || /dollar/i.test(t)) return 'USD'
+  if (t === '€' || /^eur(?:o|os)?$/i.test(t)) return 'EUR'
+  if (t === '£' || /^gbp$/i.test(t) || /pound/i.test(t)) return 'GBP'
+  if (t === '¥' || /^jpy$/i.test(t) || /yen/i.test(t)) return 'JPY'
   return fallback
+}
+
+export function detectBudgetInfo(text) {
+  const str = String(text || '').trim()
+  let total = 120000
+  let curr = 'INR'
+
+  if (!str) return { total, currency: curr }
+
+  // 1. Check for Lakhs / Lacs (e.g. 1.5 lakh, ₹1.5 lakh)
+  const mLakh = str.match(/(\d+(?:\.\d+)?)\s*(?:lakhs?|lacs?)\b/i)
+  if (mLakh) {
+    return {
+      total: Math.round(parseFloat(mLakh[1]) * 100000),
+      currency: 'INR',
+    }
+  }
+
+  // 2. Check for explicit total near Total Estimated Cost or Total:
+  // e.g. "Total Estimated Cost: €80,000", "Total Estimated Cost: 80,000 euro", "Total: $5,000"
+  const mTotalWithCurr = str.match(
+    /(?:total(?:\s+estimated)?\s+cost|estimated\s+total|total\s+budget|grand\s+total)[:\s]*([₹$€£¥]|(?:rs\.?|inr|usd|eur|gbp|jpy)\b)?\s*([\d,]{3,10})(?:\s*(k|thousand))?\s*(euro|euros|eur|gbp|pounds?|usd|dollars?|jpy|yen|inr|rupees?|rs\.?)?/i
+  )
+  if (mTotalWithCurr) {
+    const symPrefix = mTotalWithCurr[1]
+    const numRaw = mTotalWithCurr[2].replace(/,/g, '')
+    const multiplier = mTotalWithCurr[3] ? 1000 : 1
+    const symSuffix = mTotalWithCurr[4]
+    const val = parseInt(numRaw, 10) * multiplier
+    if (val > 0) {
+      total = val
+      const token = symPrefix || symSuffix || ''
+      curr = getCurrencyFromToken(token, 'INR')
+      return { total, currency: curr }
+    }
+  }
+
+  // 3. Check for any currency symbol + amount e.g. €80,000, $5,000, £4,500, ¥500,000, ₹1,60,000
+  const mSym = str.match(/([₹$€£¥])\s*([\d,]{3,10})/i)
+  if (mSym) {
+    const val = parseInt(mSym[2].replace(/,/g, ''), 10)
+    if (val > 0) {
+      total = val
+      curr = getCurrencyFromToken(mSym[1], 'INR')
+      return { total, currency: curr }
+    }
+  }
+
+  // 4. Check for amount + currency name e.g. 80000 euro, 5000 dollars, 4500 pounds
+  const mSuffix = str.match(
+    /([\d,]{3,10})\s*(?:k\s*)?(euro|euros|eur|gbp|pounds?|usd|dollars?|jpy|yen|inr|rupees?|rs\.?)\b/i
+  )
+  if (mSuffix) {
+    const val = parseInt(mSuffix[1].replace(/,/g, ''), 10)
+    if (val > 0) {
+      total = val
+      curr = getCurrencyFromToken(mSuffix[2], 'INR')
+      return { total, currency: curr }
+    }
+  }
+
+  return { total, currency: curr }
 }
 
 export function transformBudgetText(rawText, detectedCurr, targetCurr) {
@@ -67,7 +129,7 @@ export function transformBudgetText(rawText, detectedCurr, targetCurr) {
 
   // 1. Dual currency mentions e.g. (¥800 / ₹450) or ¥1,500 / ₹830 or ₹45,000 / $550
   out = out.replace(
-    /(?:[([]\s*)?([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)\s*(?:\/|\s+(?:or|approx\.?|about|~)\s+)\s*([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)(?:\s*[)\]])?/gi,
+    /(?:[([]\s*)?([₹$€£¥]|Rs\.?|INR|EUR|USD|GBP|JPY)\s*([\d,]+(?:\.\d+)?)\s*(?:\/|\s+(?:or|approx\.?|about|~)\s+)\s*([₹$€£¥]|Rs\.?|INR|EUR|USD|GBP|JPY)\s*([\d,]+(?:\.\d+)?)(?:\s*[)\]])?/gi,
     (match, sym1, num1, sym2, num2) => {
       const c1 = getCurrencyFromToken(sym1, baseCurr)
       const c2 = getCurrencyFromToken(sym2, baseCurr)
@@ -91,9 +153,9 @@ export function transformBudgetText(rawText, detectedCurr, targetCurr) {
     }
   )
 
-  // 3. Number Ranges: e.g. ₹45,000 – ₹55,000, ₹45,000 - 55,000, $500 - $700
+  // 3. Number Ranges: e.g. ₹45,000 – ₹55,000, €2,000 - €3,000, $500 - $700
   out = out.replace(
-    /([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)\s*(?:–|—|-|to|\band\b)\s*([₹$€£¥]|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)/gi,
+    /([₹$€£¥]|Rs\.?|INR|EUR|USD|GBP|JPY)\s*([\d,]+(?:\.\d+)?)\s*(?:–|—|-|to|\band\b)\s*([₹$€£¥]|Rs\.?|INR|EUR|USD|GBP|JPY)?\s*([\d,]+(?:\.\d+)?)/gi,
     (match, sym1, num1, sym2, num2) => {
       const src1 = getCurrencyFromToken(sym1, baseCurr)
       const src2 = sym2 ? getCurrencyFromToken(sym2, src1) : src1
@@ -108,9 +170,9 @@ export function transformBudgetText(rawText, detectedCurr, targetCurr) {
     }
   )
 
-  // 4. Single amounts with currency symbol or code prefix: e.g. ₹45,000, $500
+  // 4. Single amounts with currency symbol or code prefix: e.g. ₹45,000, €80,000, $500
   out = out.replace(
-    /([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)/gi,
+    /([₹$€£¥]|Rs\.?|INR|EUR|USD|GBP|JPY)\s*([\d,]+(?:\.\d+)?)/gi,
     (match, sym, numStr) => {
       const src = getCurrencyFromToken(sym, baseCurr)
       const v = parseFloat(numStr.replace(/,/g, ''))
@@ -120,13 +182,14 @@ export function transformBudgetText(rawText, detectedCurr, targetCurr) {
     }
   )
 
-  // 5. Trailing currency notation (e.g. 45,000 INR, 45,000/-, 45000 Rs)
+  // 5. Trailing currency notation (e.g. 45,000 INR, 80000 euro, 80,000 EUR, 45,000/-, 45000 Rs)
   out = out.replace(
-    /([\d,]+(?:\.\d+)?)\s*(?:-\/|\/-\s*(?:INR)?|\b(?:INR|Rs\.?)\b)/gi,
+    /([\d,]+(?:\.\d+)?)\s*(?:-\/|\/-\s*(?:INR)?|\b(?:INR|Rs\.?|EUR|euro|euros|GBP|pounds?|USD|dollars?|JPY|yen)\b)/gi,
     (match, numStr) => {
       const v = parseFloat(numStr.replace(/,/g, ''))
       if (isNaN(v)) return match
-      const c = v * ((RATES[toCurr] || 1) / (RATES['INR'] || 1))
+      const src = getCurrencyFromToken(match, baseCurr)
+      const c = v * ((RATES[toCurr] || 1) / (RATES[src] || 1))
       return saveToken(`${SYMBOLS[toCurr]}${formatConvertedNumber(c, toCurr)}`)
     }
   )
@@ -135,7 +198,11 @@ export function transformBudgetText(rawText, detectedCurr, targetCurr) {
   out = out
     .replace(/\b(?:in\s+)?Indian\s+Rupees\s*(?:\(INR\))?/gi, `in ${toCurr} (${SYMBOLS[toCurr]})`)
     .replace(/\b(?:in\s+)?Rupees\b/gi, `in ${toCurr}`)
-    .replace(/\b(?:in\s+)?INR\b/gi, `${toCurr}`)
+    .replace(/\b(?:in\s+)?Euros?\b/gi, `in ${toCurr}`)
+    .replace(/\b(?:in\s+)?Pounds?\b/gi, `in ${toCurr}`)
+    .replace(/\b(?:in\s+)?Dollars?\b/gi, `in ${toCurr}`)
+    .replace(/\b(?:in\s+)?Yen\b/gi, `in ${toCurr}`)
+    .replace(/\b(?:in\s+)?(?:INR|EUR|USD|GBP|JPY)\b/gi, `${toCurr}`)
     .replace(/\bCurrency:\s*(?:INR|USD|EUR|GBP|JPY)\b/gi, `Currency: ${toCurr}`)
     .replace(/\b(?:All\s+prices|Prices|Estimated\s+Cost|Cost)\s+in\s+[₹$€£¥]/gi, `Prices in ${SYMBOLS[toCurr]}`)
     .replace(/\([₹$€£¥]\)/g, `(${SYMBOLS[toCurr]})`)
@@ -151,33 +218,10 @@ export function transformBudgetText(rawText, detectedCurr, targetCurr) {
 export default function BudgetCalculator({ content, travellersCount = 2 }) {
   const text = String(content || '').trim()
 
-  // Detect base total and currency from text
-  let detectedTotal = 120000
-  let detectedCurr = 'INR'
-
-  const mLakh = text.match(/(\d+(?:\.\d+)?)\s*(?:lakh|lakhs|lac|lacs)\b/i)
-  if (mLakh) {
-    detectedTotal = Math.round(parseFloat(mLakh[1]) * 100000)
-    detectedCurr = 'INR'
-  } else {
-    let mTotal = text.match(/(?:Total|Overall|Grand\s+Total)[^0-9\n]*([₹$€£])?\s*([\d,]{3,10})/i)
-    if (!mTotal) {
-      mTotal = text.match(/([₹$€£])\s*([\d,]{3,10})/)
-    }
-    if (mTotal) {
-      const sym = mTotal[1]
-      const numStr = mTotal[2].replace(/,/g, '')
-      const val = parseInt(numStr, 10)
-      if (val > 0) {
-        detectedTotal = val
-        if (sym === '$') detectedCurr = 'USD'
-        else if (sym === '€') detectedCurr = 'EUR'
-        else if (sym === '£') detectedCurr = 'GBP'
-        else if (sym === '¥') detectedCurr = 'JPY'
-        else detectedCurr = 'INR'
-      }
-    }
-  }
+  const { total: detectedTotal, currency: detectedCurr } = useMemo(
+    () => detectBudgetInfo(text),
+    [text]
+  )
 
   const baseUsd = detectedTotal / (RATES[detectedCurr] || 1)
   const [curr, setCurr] = useState(detectedCurr)

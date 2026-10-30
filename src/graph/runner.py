@@ -78,6 +78,10 @@ def _is_focused_followup(query: str, thread_id: str | None = None) -> bool:
     if is_greeting_or_banter(q) or re.search(r"^(?:how(?:'s| is|s)?\s*(?:it|things?|you|u)|what(?:'s|s)?\s*up|hey+|heya|heyo|hello+|hi+|hiya+|yo+|sup|greetings?|bro\b|good\s*(?:morning|afternoon|evening))\b", q):
         return True
 
+    # Out-of-the-box, meta, identity questions or incomprehensible inputs
+    if is_out_of_the_box_or_meta(q) or is_incomprehensible_or_irrelevant(q):
+        return True
+
     # Calm places, peaceful escapes, or escaping chaos (e.g. "away from chaos. can u locate me to calm place in saudi arabia")
     if re.search(r"\b(calm|peaceful|quiet|relaxing|serene|chaos|away from chaos|escape chaos|secluded|retreat|unwind|chill out)\b", q):
         return True
@@ -188,6 +192,179 @@ def _generate_greeting_response(query: str) -> str:
     options = [form_warm, form_casual, form_concise, form_inquisitive, form_crisp]
     seed = sum(ord(c) for c in clean_q) if clean_q else 0
     return options[seed % len(options)]
+
+
+def is_incomprehensible_or_irrelevant(query: str) -> bool:
+    """
+    Detects random keysmash, non-words, or completely incomprehensible/garbled input.
+    E.g. 'asdfghjkl', 'kjsdhfkjsdhf', 'qwertyuiop', 'dfghjkl', 'aaaaaaa'
+    """
+    if not query:
+        return True
+    s = str(query).strip().lower()
+    clean = re.sub(r"[?!.,;:@#$%^&*()_+=/\-\[\]{}|~`'\"]+", "", s).strip()
+    if not clean:
+        return True
+
+    # Common keyboard smash patterns
+    smash_patterns = [
+        r"\b(?:asdf|asdfgh|asdfghjkl|qwerty|qwertyui|qwertyuiop|zxcv|zxcvbn|zxcvbnm)\b",
+        r"\b(?:kjsd|kjsdhf|lkjh|lkjhgf|poiuy|poiuyt)\b",
+    ]
+    if any(re.search(pat, clean) for pat in smash_patterns):
+        return True
+
+    # Letters-only analysis
+    letters = re.sub(r"[^a-z]", "", clean)
+    if len(letters) >= 5:
+        # 5+ letters with no vowels at all (e.g. "dfghjkl", "qwrtyp", "bcdfgh")
+        if not re.search(r"[aeiouy]", letters):
+            return True
+        # Repeated same character 4+ times (e.g. "aaaaa", "zzzzzz")
+        if re.search(r"(.)\1{4,}", letters):
+            return True
+
+    return False
+
+
+def is_out_of_the_box_or_meta(query: str) -> bool:
+    """
+    Detects when the user is asking an out-of-the-box or meta inquiry:
+    e.g. 'Can u introduce urself?', 'who are you', 'what can you do', 'what is roamly',
+    'tell me about yourself', 'how do you work', 'tell me a joke', general non-travel creative queries.
+    Such queries must NEVER latch onto previous thread destinations (like Dhaka) or dump static travel guides!
+    """
+    if not query:
+        return False
+    q = str(query).strip().lower()
+    clean_q = re.sub(r"[?!.,;:]+$", "", q).strip()
+
+    meta_patterns = [
+        r"\bintroduce\s+(?:your|ur)self\b",
+        r"\b(?:can\s+(?:you|u)\s+)?introduce\s+(?:your|ur)self\b",
+        r"\bwho\s+(?:are|r)\s+(?:you|u)\b",
+        r"\bwhat\s+(?:are|r)\s+(?:you|u)\b",
+        r"\bwhat\s+is\s+roamly\b",
+        r"\btell\s+me\s+about\s+(?:your|ur)self\b",
+        r"\btell\s+me\s+about\s+roamly\b",
+        r"\bwhat\s+can\s+(?:you|u)\s+do\b",
+        r"\bwhat\s+do\s+(?:you|u)\s+do\b",
+        r"\b(?:your|ur)\s+capabilities\b",
+        r"\bhow\s+do\s+(?:you|u)\s+work\b",
+        r"\bwho\s+(?:made|created)\s+(?:you|u)\b",
+        r"\bwhat\s+is\s+(?:your|ur)\s+name\b",
+        r"\bwhat\s+can\s+i\s+ask\s+(?:you|u)\b",
+        r"\bcan\s+(?:you|u)\s+help\s+me\b",
+        r"\bhelp\s+me\s+understand\s+what\s+you\s+do\b",
+        r"\btell\s+me\s+a\s+joke\b",
+        r"\bwhy\s+do\s+people\s+travel\b",
+        r"\bwhat\s+is\s+the\s+meaning\s+of\s+travel\b",
+    ]
+    if any(re.search(pat, clean_q) for pat in meta_patterns):
+        return True
+
+    # If the user asks a general creative/conversational query without any travel destination or planning intent
+    locs = extract_trip_locations(query)
+    has_loc = bool(locs.get("destination") or locs.get("origin"))
+    has_travel_verbs = bool(re.search(r"\b(flight|hotel|weather|itinerary|pack|packing|transit|budget|visa|airport|train)\b", clean_q))
+
+    if not has_loc and not has_travel_verbs:
+        if re.search(r"\b(tell me a story|say something funny|give me advice|what do you think of|who is your favorite)\b", clean_q):
+            return True
+
+    return False
+
+
+def _handle_out_of_the_box_query(user_input: str, thread_id: str) -> dict:
+    """
+    Dynamically answers out-of-the-box and meta questions (e.g. 'Can u introduce urself?') using the LLM.
+    Guarantees:
+    - Never uses stale thread destinations (e.g. Dhaka).
+    - Returns rich, charismatic, and varied responses rather than memorized fixed guides.
+    - Destination is strictly empty ("") so no irrelevant destination chips appear on the frontend.
+    """
+    logger.info("Handling out-of-the-box / meta query for thread '%s': '%s'", thread_id, user_input)
+
+    clean_q = user_input.strip().lower()
+    seed = sum(ord(c) for c in clean_q) if clean_q else 0
+
+    fallbacks = [
+        (
+            "### Meet Roamly Concierge 🧭✨\n\n"
+            "I'm your autonomous AI travel companion and intelligent concierge! Unlike rigid search engines or static guides, "
+            "I orchestrate a network of specialized AI agents to craft hyper-tailored, end-to-end travel plans in seconds.\n\n"
+            "Here is what I can do for you:\n"
+            "- **Universal Multi-Currency Budgeting**: Plan strictly according to your target budget in any currency—whether it's €80,000, $5,000, £4,500, ¥500,000, or ₹1,60,000—with transparent category breakdowns.\n"
+            "- **Precision Duration Itineraries**: Generate complete day-by-day schedules paced perfectly for any duration, from quick 3-day escapes to immersive 11-day and 14-day adventures.\n"
+            "- **Flight & Hotel Intelligence**: Discover optimal flight connections and hand-picked accommodations in the best central neighborhoods.\n"
+            "- **Weather-Smart Packing**: Get tailored packing checklists based on real seasonal forecasts.\n"
+            "- **Deep Insider Knowledge**: Ask me anything from local street food and hidden photo spots to quiet retreats away from tourist chaos.\n\n"
+            "What destination or trip vibe is on your mind today? Tell me what you're dreaming of, and let's plan it!"
+        ),
+        (
+            "### Hello there! I'm Roamly 🌍💫\n\n"
+            "Think of me as your personal insider travel strategist. I combine deep global travel knowledge with multi-agent artificial intelligence "
+            "to eliminate all the friction, overwhelm, and endless browser tabs of planning a journey.\n\n"
+            "Whether you're looking for:\n"
+            "- A peaceful, tranquil mountain escape away from everyday chaos\n"
+            "- An iconic street food trail through vibrant neighborhood night markets\n"
+            "- A custom group adventure tailored to an exact budget and group size\n"
+            "- Or instant answers to twisted transit, visa, or packing questions\n\n"
+            "I adapt to every single detail you give me. Where would you love to travel next?"
+        ),
+        (
+            "### Roamly Concierge at your service 🗺️🚀\n\n"
+            "I'm an autonomous travel intelligence agent designed to turn any travel idea into a fully-realized dossier.\n\n"
+            "You can give me requests like:\n"
+            "- *'Plan an 11-day trip for 8 people with an 80,000 Euro budget from Kashmir to Atlantica'*\n"
+            "- *'Find calm, scenic spots in Saudi Arabia away from crowds'*\n"
+            "- *'What's the best street food and transit hack in Tokyo?'*\n\n"
+            "I'll calculate realistic costs in your exact currency, map out each day with authentic local experiences, and answer any follow-up questions you have along the way.\n\n"
+            "How can I help you travel smarter today?"
+        ),
+    ]
+
+    meta_answer = fallbacks[seed % len(fallbacks)]
+
+    try:
+        llm = get_concierge_llm()
+        meta_prompt = (
+            f"You are Roamly Concierge, an intelligent, charismatic, and highly versatile multi-agent AI travel advisor.\n"
+            f"The traveler asked: \"{user_input.strip()}\"\n\n"
+            f"INSTRUCTIONS:\n"
+            f"1. Respond conversationally with warmth, personality, and intellectual depth.\n"
+            f"2. If asked to introduce yourself or explain what you do: Introduce yourself dynamically as Roamly Concierge. "
+            f"Explain how you use multi-agent intelligence to build complete travel plans—covering multi-currency budgets (€, $, £, ¥, ₹), "
+            f"exact durations (from weekend getaways to 11-day and 14-day expeditions), flights, stays, weather packing, and deep local insider secrets "
+            f"(calm escapes away from chaos, iconic street food, and transit passes). "
+            f"3. If asked an out-of-the-box or creative question: Answer thoughtfully, wittily, and engagingly.\n"
+            f"4. If the message appears completely garbled, nonsensical, or irrelevant: Politely let them know you didn't quite get that and ask them to rephrase.\n"
+            f"5. Under NO circumstances should you mention random past destinations (like Dhaka) and NEVER output static bulleted travel guides unless the user explicitly asked for advice on a specific destination."
+        )
+        res = llm.invoke([
+            SystemMessage(content="You are Roamly Concierge, a witty, brilliant, and adaptive travel companion."),
+            HumanMessage(content=meta_prompt),
+        ])
+        ans = (getattr(res, "content", "") or "").strip()
+        if ans and len(ans) >= 25 and not re.search(r"\bRecommendations for Dhaka\b", ans):
+            meta_answer = ans
+    except Exception as e:
+        logger.warning("Meta LLM invocation error: %s", e)
+
+    return {
+        "thread_id": thread_id,
+        "destination": "",
+        "answer": meta_answer,
+        "is_followup": True,
+        "flight_results": "",
+        "hotel_results": "",
+        "weather_results": "",
+        "itinerary": "",
+        "budget_breakdown": "",
+        "packing_list": "",
+        "must_visit": "",
+        "travel_essentials": "",
+    }
 
 
 def _generate_concierge_fallback(query: str, dest: str) -> str:
@@ -559,13 +736,37 @@ def run_travel_agent(user_input: str, thread_id: str | None = None, destination:
     # Check thread memory context
     thread_ctx = _THREAD_MEMORY.get(thread_id, {})
 
+    # 0. Immediate check for incomprehensible / irrelevant keyboard smash inputs
+    if is_incomprehensible_or_irrelevant(user_input):
+        return {
+            "thread_id": thread_id,
+            "destination": "",
+            "answer": (
+                "### I didn't quite catch that 🤔\n\n"
+                "Could you please rephrase your request or tell me what travel plans, destinations, or questions you have in mind? "
+                "I'm ready to help you plan an unforgettable trip!"
+            ),
+            "is_followup": True,
+            "flight_results": "",
+            "hotel_results": "",
+            "weather_results": "",
+            "itinerary": "",
+            "budget_breakdown": "",
+            "packing_list": "",
+            "must_visit": "",
+            "travel_essentials": "",
+        }
+
+    # 0b. Immediate check for out-of-the-box & meta inquiries (e.g. 'Can u introduce urself?')
+    if is_out_of_the_box_or_meta(user_input):
+        return _handle_out_of_the_box_query(user_input, thread_id)
+
     # Fast Concierge Mode: Handle focused queries with conversational context
     if _is_focused_followup(user_input, thread_id):
         logger.info("Routing query to fast Concierge LLM for thread '%s': '%s'", thread_id, user_input)
 
-        is_greeting = is_greeting_or_banter(user_input)
-
         # Dedicated Greeting Handler: output short greet message in different forms without leaking false destinations
+        is_greeting = is_greeting_or_banter(user_input)
         if is_greeting:
             greeting_answer = _generate_greeting_response(user_input)
             try:
@@ -602,6 +803,10 @@ def run_travel_agent(user_input: str, thread_id: str | None = None, destination:
                 "must_visit": "",
                 "travel_essentials": "",
             }
+
+        # 3. Dedicated Out-of-the-Box & Meta Inquiries Handler: dynamic, satisfying LLM answer, never latching to stale destination
+        if is_out_of_the_box_or_meta(user_input):
+            return _handle_out_of_the_box_query(user_input, thread_id)
 
         # 1. Resolve destination: Explicit Request -> Query -> Thread Memory -> Destination Extractor
         dest = (destination or "").strip()

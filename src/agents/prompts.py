@@ -59,7 +59,7 @@ REQUIRED STRUCTURE:
 3. Practical Recommendations (2-3 concise bullet points on local transit, pace, and timing)
 
 CRITICAL RULES:
-- You MUST explicitly plan EVERY day requested in the trip (e.g., if a 5-day trip, you must write out Day 1, Day 2, Day 3, Day 4, AND Day 5. If 7 days, Day 1 through Day 7). Never stop at Day 3 or Day 4!
+- You MUST explicitly plan EVERY day requested in the trip (e.g., if a 5-day trip: Day 1 through Day 5; if 7 days: Day 1 through Day 7; if 11 days: Day 1 through Day 11; if 14 days: Day 1 through Day 14). NEVER truncate, stop early, or cap at 10 days!
 - Keep descriptions punchy, vivid, and direct so every day is fully completed without running out of room.
 - DO NOT generate Budget Breakdown, Packing Checklist, or Travel Essentials (other specialist agents generate them).
 - Be practical, direct, and engaging.
@@ -158,7 +158,9 @@ Return a clean breakdown with these sections:
 - Total Estimated Cost
 - Per Person
 
-Use realistic ranges in the currency that fits the destination/origin. Be honest and practical.
+CRITICAL BUDGET AND CURRENCY INSTRUCTION:
+- If the user provided an explicit budget amount or currency in the User Query (e.g. '80000 euro', '€80,000', '$5,000', '£4,500', '¥500,000', '1.5 lakh', '₹1,60,000'), you MUST strictly plan according to that exact amount and currency symbol. Total Estimated Cost must equal that target budget. Never switch to another currency or use arbitrary defaults!
+- If no budget was specified, use realistic ranges in the currency that fits the destination/origin. Be honest and practical.
 """
 
 

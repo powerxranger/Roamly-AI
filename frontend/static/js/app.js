@@ -590,6 +590,36 @@
       /^(?:bro|mate|dude|buddy|friend)\b/i.test(s);
   }
 
+  function isOutOfTheBoxOrMeta(text) {
+    if (!text) return false;
+    var s = String(text).toLowerCase().trim();
+    return /\bintroduce\s+(?:your|ur)self\b/i.test(s) ||
+      /\bwho\s+(?:are|r)\s+(?:you|u)\b/i.test(s) ||
+      /\bwhat\s+(?:are|r)\s+(?:you|u)\b/i.test(s) ||
+      /\bwhat\s+is\s+roamly\b/i.test(s) ||
+      /\btell\s+me\s+about\s+(?:your|ur)self\b/i.test(s) ||
+      /\bwhat\s+can\s+(?:you|u)\s+do\b/i.test(s) ||
+      /\bwhat\s+do\s+(?:you|u)\s+do\b/i.test(s) ||
+      /\b(?:your|ur)\s+capabilities\b/i.test(s) ||
+      /\bhow\s+do\s+(?:you|u)\s+work\b/i.test(s) ||
+      /\bwho\s+(?:made|created)\s+(?:you|u)\b/i.test(s) ||
+      /\btell\s+me\s+a\s+joke\b/i.test(s) ||
+      /\bwhy\s+do\s+people\s+travel\b/i.test(s);
+  }
+
+  function isIncomprehensibleOrIrrelevant(text) {
+    if (!text) return true;
+    var s = String(text).toLowerCase().replace(/[?!.,;:@#$%^&*()_+=/\-\[\]{}|~`'"]+/g, '').trim();
+    if (!s) return true;
+    if (/\b(?:asdf|asdfgh|asdfghjkl|qwerty|qwertyuiop|zxcv|zxcvbnm|kjsd|lkjh|poiuy)\b/i.test(s)) return true;
+    var letters = s.replace(/[^a-z]/g, '');
+    if (letters.length >= 5) {
+      if (!/[aeiouy]/.test(letters)) return true;
+      if (/(.)\1{4,}/.test(letters)) return true;
+    }
+    return false;
+  }
+
   function extractOrigin(text) {
     if (!text) return null;
     var t = String(text);
@@ -603,10 +633,9 @@
   function extractDestination(text) {
     if (!text) return null;
     var t = String(text);
-    if (isGreetingOrBanter(t)) {
-      var majors = ["Saudi Arabia", "AlUla", "Riyadh", "Jeddah", "Abha", "Dubai", "UAE", "Abu Dhabi", "Japan", "Tokyo", "Kyoto", "Osaka", "Bali", "Paris", "Rome", "Italy", "Switzerland", "London"];
-      for (var i = 0; i < majors.length; i++) {
-        if (new RegExp("\\b" + majors[i] + "\\b", "i").test(t)) {
+    if (isGreetingOrBanter(t) || isOutOfTheBoxOrMeta(t) || isIncomprehensibleOrIrrelevant(t)) {
+      return null;
+    }
           return majors[i];
         }
       }
@@ -715,10 +744,32 @@
     });
 
     addCard("Budget", "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6", function (t) {
-      var m = t.match(/(?:budget|under)\s*(?:of\s*)?([₹$€£][\d,]+|\d{3,6}\s*(?:usd|inr|eur|gbp)?)/i);
-      if (m) return m[1].toUpperCase();
-      m = t.match(/(₹[\d,]+|\$[\d,]+)/);
-      return m ? m[1] : null;
+      if (!t) return null;
+      var str = String(t);
+      // Lakhs
+      var mLakh = str.match(/(?:budget|cost|under|max)?\s*(?:of\s*)?([₹$€£¥])?\s*(\d+(?:\.\d+)?)\s*(?:lakhs?|lacs?)\b/i);
+      if (mLakh) return (mLakh[1] || "₹") + mLakh[2] + " Lakh";
+      // Prefix symbol
+      var mSym = str.match(/(?:budget|cost|under|max)?\s*(?:of\s*)?([₹$€£¥])\s*([\d,]+(?:\.\d+)?)/i);
+      if (mSym) return mSym[1] + mSym[2];
+      // Named currency (e.g. 80000 euro, 5000 usd, 4500 gbp, 500000 yen, 160000 inr)
+      var mNamed = str.match(/(?:budget|cost|under|max)?\s*(?:of\s*)?([\d,]+(?:\.\d+)?)\s*(?:k\s*)?(euro|euros|eur|gbp|pounds?|usd|dollars?|jpy|yen|inr|rupees?|rs\.?|aed|sar)\b/i);
+      if (mNamed) {
+        var curr = mNamed[2].toLowerCase();
+        var sym = "";
+        if (/euro|eur/i.test(curr)) sym = "€";
+        else if (/gbp|pound/i.test(curr)) sym = "£";
+        else if (/usd|dollar/i.test(curr)) sym = "$";
+        else if (/jpy|yen/i.test(curr)) sym = "¥";
+        else if (/inr|rupee|rs/i.test(curr)) sym = "₹";
+        else if (/aed/i.test(curr)) sym = "AED ";
+        else if (/sar/i.test(curr)) sym = "SAR ";
+        else sym = curr.toUpperCase() + " ";
+        var num = mNamed[1];
+        var val = parseInt(num.replace(/,/g, ""), 10);
+        return sym + (val ? val.toLocaleString() : num);
+      }
+      return null;
     });
 
     addCard("Timing", "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z", function (t) {
@@ -1147,21 +1198,37 @@
       detectedTotal = Math.round(parseFloat(mLakh[1]) * 100000);
       detectedCurr = "INR";
     } else {
-      var mTotal = text.match(/(?:Total|Overall|Grand\s+Total)[^0-9\n]*([₹$€£])?\s*([\d,]{3,10})/i);
-      if (!mTotal) {
-        mTotal = text.match(/([₹$€£])\s*([\d,]{3,10})/);
-      }
-      if (mTotal) {
-        var sym = mTotal[1];
-        var numStr = mTotal[2].replace(/,/g, "");
-        var val = parseInt(numStr, 10);
+      var mTotalWithCurr = text.match(
+        /(?:total(?:\s+estimated)?\s+cost|estimated\s+total|total\s+budget|grand\s+total)[:\s]*([₹$€£¥]|(?:rs\.?|inr|usd|eur|gbp|jpy)\b)?\s*([\d,]{3,10})(?:\s*(k|thousand))?\s*(euro|euros|eur|gbp|pounds?|usd|dollars?|jpy|yen|inr|rupees?|rs\.?)?/i
+      );
+      if (mTotalWithCurr) {
+        var symPrefix = mTotalWithCurr[1];
+        var numRaw = mTotalWithCurr[2].replace(/,/g, "");
+        var multiplier = mTotalWithCurr[3] ? 1000 : 1;
+        var symSuffix = mTotalWithCurr[4];
+        var val = parseInt(numRaw, 10) * multiplier;
         if (val > 0) {
           detectedTotal = val;
-          if (sym === "$") detectedCurr = "USD";
-          else if (sym === "€") detectedCurr = "EUR";
-          else if (sym === "£") detectedCurr = "GBP";
-          else if (sym === "¥") detectedCurr = "JPY";
-          else detectedCurr = "INR";
+          var token = symPrefix || symSuffix || "";
+          detectedCurr = getCurrencyFromToken(token, "INR");
+        }
+      } else {
+        var mSym = text.match(/([₹$€£¥])\s*([\d,]{3,10})/);
+        if (mSym) {
+          var val = parseInt(mSym[2].replace(/,/g, ""), 10);
+          if (val > 0) {
+            detectedTotal = val;
+            detectedCurr = getCurrencyFromToken(mSym[1], "INR");
+          }
+        } else {
+          var mSuffix = text.match(/([\d,]{3,10})\s*(?:k\s*)?(euro|euros|eur|gbp|pounds?|usd|dollars?|jpy|yen|inr|rupees?|rs\.?)\b/i);
+          if (mSuffix) {
+            var val = parseInt(mSuffix[1].replace(/,/g, ""), 10);
+            if (val > 0) {
+              detectedTotal = val;
+              detectedCurr = getCurrencyFromToken(mSuffix[2], "INR");
+            }
+          }
         }
       }
     }
@@ -1292,14 +1359,14 @@
     }
 
     function getCurrencyFromToken(tok, fallback) {
-      if (!tok) return fallback;
-      var t = tok.trim();
-      if (t === "₹" || /^Rs\.?$/i.test(t) || /^INR$/i.test(t)) return "INR";
-      if (t === "$" || /^USD$/i.test(t)) return "USD";
-      if (t === "€" || /^EUR$/i.test(t)) return "EUR";
-      if (t === "£" || /^GBP$/i.test(t)) return "GBP";
-      if (t === "¥" || /^JPY$/i.test(t)) return "JPY";
-      return fallback;
+      if (!tok) return fallback || "INR";
+      var t = tok.trim().toLowerCase();
+      if (t === "₹" || /^rs\.?$/i.test(t) || /^inr$/i.test(t) || /rupee/i.test(t) || /lakh/i.test(t)) return "INR";
+      if (t === "$" || /^usd$/i.test(t) || /dollar/i.test(t)) return "USD";
+      if (t === "€" || /^eur(?:o|os)?$/i.test(t)) return "EUR";
+      if (t === "£" || /^gbp$/i.test(t) || /pound/i.test(t)) return "GBP";
+      if (t === "¥" || /^jpy$/i.test(t) || /yen/i.test(t)) return "JPY";
+      return fallback || "INR";
     }
 
     function transformBudgetText(rawText, baseCurr, toCurr) {
@@ -1319,7 +1386,7 @@
 
       // 1. Dual currency mentions e.g. (¥800 / ₹450) or ¥1,500 / ₹830 or ₹45,000 / $550
       out = out.replace(
-        /(?:[([]\s*)?([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)\s*(?:\/|\s+(?:or|approx\.?|about|~)\s+)\s*([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)(?:\s*[)\]])?/gi,
+        /(?:[([]\s*)?([₹$€£¥]|Rs\.?|INR|EUR|USD|GBP|JPY)\s*([\d,]+(?:\.\d+)?)\s*(?:\/|\s+(?:or|approx\.?|about|~)\s+)\s*([₹$€£¥]|Rs\.?|INR|EUR|USD|GBP|JPY)\s*([\d,]+(?:\.\d+)?)(?:\s*[)\]])?/gi,
         function (match, sym1, num1, sym2, num2) {
           var c1 = getCurrencyFromToken(sym1, baseCurr);
           var c2 = getCurrencyFromToken(sym2, baseCurr);
@@ -1345,7 +1412,7 @@
 
       // 3. Number Ranges
       out = out.replace(
-        /([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)\s*(?:–|—|-|to|\band\b)\s*([₹$€£¥]|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)/gi,
+        /([₹$€£¥]|Rs\.?|INR|EUR|USD|GBP|JPY)\s*([\d,]+(?:\.\d+)?)\s*(?:–|—|-|to|\band\b)\s*([₹$€£¥]|Rs\.?|INR|EUR|USD|GBP|JPY)?\s*([\d,]+(?:\.\d+)?)/gi,
         function (match, sym1, num1, sym2, num2) {
           var src1 = getCurrencyFromToken(sym1, baseCurr);
           var src2 = sym2 ? getCurrencyFromToken(sym2, src1) : src1;
@@ -1358,9 +1425,9 @@
         }
       );
 
-      // 4. Single amounts
+      // 4. Single amounts with prefix
       out = out.replace(
-        /([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)/gi,
+        /([₹$€£¥]|Rs\.?|INR|EUR|USD|GBP|JPY)\s*([\d,]+(?:\.\d+)?)/gi,
         function (match, sym, numStr) {
           var src = getCurrencyFromToken(sym, baseCurr);
           var v = parseFloat(numStr.replace(/,/g, ""));
@@ -1370,13 +1437,14 @@
         }
       );
 
-      // 5. Trailing currency notation (e.g. 45,000 INR, 45,000/-, 45000 Rs)
+      // 5. Trailing currency notation (e.g. 45,000 INR, 80000 euro, 80,000 EUR, 45,000/-, 45000 Rs)
       out = out.replace(
-        /([\d,]+(?:\.\d+)?)\s*(?:-\/|\/-\s*(?:INR)?|\b(?:INR|Rs\.?)\b)/gi,
+        /([\d,]+(?:\.\d+)?)\s*(?:-\/|\/-\s*(?:INR)?|\b(?:INR|Rs\.?|EUR|euro|euros|GBP|pounds?|USD|dollars?|JPY|yen)\b)/gi,
         function (match, numStr) {
           var v = parseFloat(numStr.replace(/,/g, ""));
           if (isNaN(v)) return match;
-          var c = v * ((rates[toCurr] || 1) / (rates["INR"] || 1));
+          var src = getCurrencyFromToken(match, baseCurr);
+          var c = v * ((rates[toCurr] || 1) / (rates[src] || 1));
           return saveToken(symbols[toCurr] + formatConvertedNumber(c, toCurr));
         }
       );
@@ -1385,7 +1453,11 @@
       out = out
         .replace(/\b(?:in\s+)?Indian\s+Rupees\s*(?:\(INR\))?/gi, "in " + toCurr + " (" + symbols[toCurr] + ")")
         .replace(/\b(?:in\s+)?Rupees\b/gi, "in " + toCurr)
-        .replace(/\b(?:in\s+)?INR\b/gi, toCurr)
+        .replace(/\b(?:in\s+)?Euros?\b/gi, "in " + toCurr)
+        .replace(/\b(?:in\s+)?Pounds?\b/gi, "in " + toCurr)
+        .replace(/\b(?:in\s+)?Dollars?\b/gi, "in " + toCurr)
+        .replace(/\b(?:in\s+)?Yen\b/gi, "in " + toCurr)
+        .replace(/\b(?:in\s+)?(?:INR|EUR|USD|GBP|JPY)\b/gi, toCurr)
         .replace(/\bCurrency:\s*(?:INR|USD|EUR|GBP|JPY)\b/gi, "Currency: " + toCurr)
         .replace(/\b(?:All\s+prices|Prices|Estimated\s+Cost|Cost)\s+in\s+[₹$€£¥]/gi, "Prices in " + symbols[toCurr])
         .replace(/\([₹$€£¥]\)/g, "(" + symbols[toCurr] + ")");
@@ -1497,7 +1569,8 @@
   function renderFollowupChips(dest) {
     var cleanDest = dest ? String(dest).replace(/^[,.\s-]+|[,.\s-]+$/g, "").trim() : "";
     var isInvalid = !cleanDest || cleanDest.length < 2 || cleanDest.length > 30 || /[?!]/.test(cleanDest) ||
-      /\b(?:how|its|going|bro|hey|hello|doing|asking|wanna|chaos|locate|free time|destination|custom)\b/i.test(cleanDest);
+      /\b(?:how|its|it's|going|bro|hey|hello|doing|asking|wanna|chaos|locate|free time|destination|custom|introduce|yourself|urself|who|can you|capabilities)\b/i.test(cleanDest) ||
+      /\b(?:asdf|qwerty|zxcv|kjsd|lkjh)\b/i.test(cleanDest);
 
     var suggestions = !isInvalid
       ? [
@@ -1723,11 +1796,23 @@
     var body = el("div", "card-body");
     body.appendChild(mdBlock(result.answer, "No details returned."));
 
-    var dest = extractDestination(result.__query) || extractDestination(result.answer);
-    if (dest) {
-      var followups = renderFollowupChips(dest);
-      if (followups) body.appendChild(followups);
+    var queryText = result.__query || "";
+    var isGreeting = isGreetingOrBanter(queryText);
+    var isMeta = isOutOfTheBoxOrMeta(queryText);
+    var isIrrelevant = isIncomprehensibleOrIrrelevant(queryText);
+    var isNonDest = isGreeting || isMeta || isIrrelevant || result.destination === "";
+
+    var dest = "";
+    if (!isNonDest) {
+      if (result.destination) {
+        dest = result.destination;
+      }
+      if (!dest) {
+        dest = extractDestination(queryText);
+      }
     }
+    var followups = renderFollowupChips(dest);
+    if (followups) body.appendChild(followups);
 
     card.appendChild(body);
 

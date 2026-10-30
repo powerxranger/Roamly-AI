@@ -36,39 +36,202 @@ def _extract_number(text: str, pattern: str, default: int) -> int:
     return default
 
 
+def extract_budget_info(query: str, dest: str = "") -> dict:
+    """
+    Universally extracts budget amount, currency symbol, code, and formatted text from any user query.
+    Supports EUR (€), GBP (£), USD ($), JPY (¥), INR (₹ / Lakhs), AED, SAR, and other world currencies.
+    Detects patterns like 'budget of 80000 euro', '€80,000', '80k euro', '$5,000', '1.5 lakh', 'under £4,500'.
+    """
+    q = str(query or "").strip().lower()
+    clean_dest = str(dest or "").lower()
+
+    # Currency map with canonical codes and symbols
+    CURRENCY_MAP = {
+        "euro": ("€", "EUR", "Euro"),
+        "euros": ("€", "EUR", "Euro"),
+        "eur": ("€", "EUR", "Euro"),
+        "€": ("€", "EUR", "Euro"),
+        "gbp": ("£", "GBP", "British Pound"),
+        "pound": ("£", "GBP", "British Pound"),
+        "pounds": ("£", "GBP", "British Pound"),
+        "£": ("£", "GBP", "British Pound"),
+        "usd": ("$", "USD", "US Dollar"),
+        "dollar": ("$", "USD", "US Dollar"),
+        "dollars": ("$", "USD", "US Dollar"),
+        "$": ("$", "USD", "US Dollar"),
+        "jpy": ("¥", "JPY", "Japanese Yen"),
+        "yen": ("¥", "JPY", "Japanese Yen"),
+        "¥": ("¥", "JPY", "Japanese Yen"),
+        "inr": ("₹", "INR", "Indian Rupee"),
+        "rs": ("₹", "INR", "Indian Rupee"),
+        "rs.": ("₹", "INR", "Indian Rupee"),
+        "rupee": ("₹", "INR", "Indian Rupee"),
+        "rupees": ("₹", "INR", "Indian Rupee"),
+        "₹": ("₹", "INR", "Indian Rupee"),
+        "aed": ("AED ", "AED", "UAE Dirham"),
+        "dirham": ("AED ", "AED", "UAE Dirham"),
+        "dirhams": ("AED ", "AED", "UAE Dirham"),
+        "sar": ("SAR ", "SAR", "Saudi Riyal"),
+        "riyal": ("SAR ", "SAR", "Saudi Riyal"),
+        "riyals": ("SAR ", "SAR", "Saudi Riyal"),
+        "aud": ("A$", "AUD", "Australian Dollar"),
+        "cad": ("C$", "CAD", "Canadian Dollar"),
+        "sgd": ("S$", "SGD", "Singapore Dollar"),
+        "chf": ("CHF ", "CHF", "Swiss Franc"),
+    }
+
+    # 1. Lakhs / Lacs notation: e.g. "1.5 lakh", "2 lakhs", "1.5 lac" -> INR (₹)
+    m_lakh = re.search(r"(\d+(?:\.\d+)?)\s*(?:lakh|lakhs|lac|lacs)\b", q)
+    if m_lakh:
+        amt = int(float(m_lakh.group(1)) * 100000)
+        return {
+            "amount": amt,
+            "symbol": "₹",
+            "code": "INR",
+            "name": "Indian Rupee",
+            "formatted": f"₹{amt:,}",
+            "has_explicit_budget": True,
+        }
+
+    # 2. Currency symbol prefix with number: e.g. "€80,000", "€ 80000", "$5,000", "£4,500", "¥500,000", "₹1,60,000", "€80k"
+    m_sym = re.search(r"([€$£¥₹])\s*([\d,]+(?:\.\d+)?)\s*(k\b)?", query, re.IGNORECASE)
+    if m_sym:
+        sym = m_sym.group(1)
+        raw_val = float(m_sym.group(2).replace(",", ""))
+        if m_sym.group(3):
+            raw_val *= 1000
+        amt = int(raw_val)
+        curr_info = CURRENCY_MAP.get(sym, (sym, "CUSTOM", "Currency"))
+        return {
+            "amount": amt,
+            "symbol": curr_info[0],
+            "code": curr_info[1],
+            "name": curr_info[2],
+            "formatted": f"{curr_info[0]}{amt:,}",
+            "has_explicit_budget": True,
+        }
+
+    # 3. Phrasing with "budget of", "budget", "under", "cost", "max": e.g. "budget of 80000 euro", "under 80,000 EUR", "budget of 5000 USD"
+    curr_tokens_regex = r"(?:euro|euros|eur|€|usd|dollars?|\$|gbp|pounds?|£|jpy|yen|¥|inr|rs\.?|rupees?|₹|aed|dirhams?|sar|riyals?|aud|cad|sgd|chf)"
+    m_phrase = re.search(
+        rf"(?:budget(?:\s+of)?|under|cost(?:\s+of)?|max(?:\s+of)?)\s*[:\s]*"
+        rf"([€$£¥₹])?\s*([\d,]+(?:\.\d+)?)\s*(k\b)?\s*({curr_tokens_regex})?",
+        q,
+        re.IGNORECASE,
+    )
+    if m_phrase and (m_phrase.group(1) or m_phrase.group(4)):
+        sym_token = (m_phrase.group(1) or m_phrase.group(4) or "").lower()
+        curr_info = CURRENCY_MAP.get(sym_token, ("€" if "eur" in sym_token or "euro" in sym_token else ("₹", "INR", "INR")))
+        raw_val = float(m_phrase.group(2).replace(",", ""))
+        if m_phrase.group(3):
+            raw_val *= 1000
+        amt = int(raw_val)
+        return {
+            "amount": amt,
+            "symbol": curr_info[0],
+            "code": curr_info[1],
+            "name": curr_info[2],
+            "formatted": f"{curr_info[0]}{amt:,}",
+            "has_explicit_budget": True,
+        }
+
+    # 4. Number followed by currency code/word: e.g. "80000 euro", "80000 euros", "80,000 EUR", "80k euro", "5000 usd", "4500 gbp"
+    m_suffix = re.search(
+        rf"([\d,]+(?:\.\d+)?)\s*(k\b)?\s*({curr_tokens_regex})\b",
+        q,
+        re.IGNORECASE,
+    )
+    if m_suffix:
+        raw_val = float(m_suffix.group(1).replace(",", ""))
+        if m_suffix.group(2):
+            raw_val *= 1000
+        amt = int(raw_val)
+        curr_token = m_suffix.group(3).lower()
+        curr_info = CURRENCY_MAP.get(curr_token, ("€" if "eur" in curr_token or "euro" in curr_token else ("₹", "INR", "INR")))
+        return {
+            "amount": amt,
+            "symbol": curr_info[0],
+            "code": curr_info[1],
+            "name": curr_info[2],
+            "formatted": f"{curr_info[0]}{amt:,}",
+            "has_explicit_budget": True,
+        }
+
+    # 5. Phrasing with "budget of [number]" without explicit currency token
+    m_num_only = re.search(
+        r"(?:budget(?:\s+of)?|under|cost(?:\s+of)?|max(?:\s+of)?)\s*[:\s]*([\d,]+(?:\.\d+)?)\s*(k\b)?",
+        q,
+        re.IGNORECASE,
+    )
+    if m_num_only:
+        raw_val = float(m_num_only.group(1).replace(",", ""))
+        if m_num_only.group(2):
+            raw_val *= 1000
+        amt = int(raw_val)
+        # Infer currency from destination or origin hints
+        is_eu = any(x in clean_dest for x in ["paris", "france", "rome", "italy", "spain", "amsterdam", "europe", "germany"])
+        is_us = any(x in clean_dest for x in ["usa", "new york", "america", "california"])
+        is_uk = any(x in clean_dest for x in ["london", "uk", "scotland", "england"])
+        is_jp = any(x in clean_dest for x in ["japan", "tokyo", "kyoto", "osaka"])
+        if is_eu:
+            sym, code, name = "€", "EUR", "Euro"
+        elif is_us:
+            sym, code, name = "$", "USD", "US Dollar"
+        elif is_uk:
+            sym, code, name = "£", "GBP", "British Pound"
+        elif is_jp:
+            sym, code, name = "¥", "JPY", "Japanese Yen"
+        else:
+            sym, code, name = "₹", "INR", "Indian Rupee"
+        return {
+            "amount": amt,
+            "symbol": sym,
+            "code": code,
+            "name": name,
+            "formatted": f"{sym}{amt:,}",
+            "has_explicit_budget": True,
+        }
+
+    # 6. Default Fallback when no budget was mentioned in query
+    is_eu = any(x in clean_dest for x in ["paris", "france", "rome", "italy", "spain", "amsterdam", "europe", "germany"])
+    if is_eu:
+        return {
+            "amount": 2500,
+            "symbol": "€",
+            "code": "EUR",
+            "name": "Euro",
+            "formatted": "€2,500",
+            "has_explicit_budget": False,
+        }
+    return {
+        "amount": 150000,
+        "symbol": "₹",
+        "code": "INR",
+        "name": "Indian Rupee",
+        "formatted": "₹1,50,000",
+        "has_explicit_budget": False,
+    }
+
+
 def _extract_budget_amount(query: str) -> tuple[int, str]:
-    """Returns (total_amount, currency_symbol) from user query."""
-    q = query.lower()
-    # Check for Lakhs / Lacs
-    mLakh = re.search(r"(\d+(?:\.\d+)?)\s*(?:lakh|lakhs|lac|lacs)\b", q)
-    if mLakh:
-        return int(float(mLakh.group(1)) * 100000), "₹"
-
-    # Check for direct INR
-    mInr = re.search(r"₹\s*([\d,]+)", query)
-    if mInr:
-        return int(mInr.group(1).replace(",", "")), "₹"
-
-    # Check for USD / $
-    mUsd = re.search(r"\$\s*([\d,]+)", query)
-    if mUsd:
-        return int(mUsd.group(1).replace(",", "")), "$"
-
-    # Default to ₹1,50,000
-    return 150000, "₹"
+    """Returns (total_amount, currency_symbol) from user query for backward compatibility."""
+    info = extract_budget_info(query)
+    return info["amount"], info["symbol"]
 
 
 def _generate_fallback_budget(query: str, dest: str) -> str:
-    total_amt, curr = _extract_budget_amount(query)
-    people = _extract_number(query, r"(\d+)\s*(?:people|person|traveller|travelers)", 2)
+    b_info = extract_budget_info(query, dest)
+    total_amt = b_info["amount"]
+    curr = b_info["symbol"]
+    people = _extract_number(query, r"(\d+)\s*(?:people|person|traveller|travelers|adults)", 2)
     per_person = total_amt // max(people, 1)
 
-    # Allocation percentages
+    # Exact allocation percentages summing to 100% without rounding drift
     flight_share = int(total_amt * 0.38)
     hotel_share = int(total_amt * 0.30)
     food_share = int(total_amt * 0.16)
     transit_share = int(total_amt * 0.08)
-    activities_share = int(total_amt * 0.08)
+    activities_share = total_amt - (flight_share + hotel_share + food_share + transit_share)
 
     return (
         f"### Budget Breakdown\n\n"
@@ -169,9 +332,20 @@ def extras_agent(state: TravelState):
     dest = state.get("destination") or extract_destination(user_query) or "Destination"
     weather = state.get("weather_results", "")
 
+    b_info = extract_budget_info(user_query, dest)
+    budget_instruction = ""
+    if b_info["has_explicit_budget"]:
+        budget_instruction = (
+            f"\n\nMANDATORY USER BUDGET REQUIREMENT:\n"
+            f"The traveler has explicitly specified a total trip budget of {b_info['formatted']} ({b_info['name']}). "
+            f"You MUST generate the 'Budget Breakdown' section strictly in {b_info['name']} using symbol {b_info['symbol']} ({b_info['code']}). "
+            f"The 'Total Estimated Cost' MUST be exactly {b_info['formatted']}. "
+            f"Ensure all line items (Flights, Hotels, Food, Transport, Activities) are in {b_info['symbol']} and sum up to {b_info['formatted']}."
+        )
+
     # Token-efficient truncated context (prevents 4,000-token prompt bloat)
     prompt = EXTRAS_AGENT_PROMPT.format(
-        user_query=user_query,
+        user_query=user_query + budget_instruction,
         flight_results=state.get("flight_results", "")[:1000],
         hotel_results=state.get("hotel_results", "")[:1000],
         weather_results=weather[:600],
@@ -210,7 +384,17 @@ def extras_agent(state: TravelState):
     )
 
     # GUARANTEED REFLECTION: Never leave sections missing or empty for any trip
+    # If LLM didn't produce budget_breakdown, OR if user requested a specific currency and LLM used the wrong one:
+    needs_budget_fallback = False
     if not budget_breakdown:
+        needs_budget_fallback = True
+    elif b_info["has_explicit_budget"]:
+        sym = b_info["symbol"].strip()
+        code = b_info["code"].strip()
+        if sym not in budget_breakdown and code not in budget_breakdown:
+            needs_budget_fallback = True
+
+    if needs_budget_fallback:
         budget_breakdown = _generate_fallback_budget(user_query, dest)
     if not packing_list:
         packing_list = _generate_fallback_packing(dest, weather)

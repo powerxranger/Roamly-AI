@@ -19,20 +19,22 @@ def _get_duration_instruction(query: str) -> str:
     if m:
         days = min(int(m.group(1)), 30)
         return (
-            f"MANDATORY COMPLETION TARGET: The user explicitly requested a {days}-day trip. "
+            f"MANDATORY COMPLETION TARGET: The user explicitly requested an exact {days}-day trip. "
             f"You MUST generate ALL {days} days: Day 1, Day 2, through Day {days}. "
-            f"Under NO circumstances should you stop at Day 3 or Day 4. Complete all {days} days fully!"
+            f"Under NO circumstances should you stop early, truncate, or cap at 10 days. Complete all {days} days fully!"
         )
     return (
         "MANDATORY COMPLETION TARGET: Explicitly plan and write out EVERY day of the requested duration "
-        "from Day 1 to the final day without truncating or stopping early!"
+        "from Day 1 to the final day without truncating, capping at 10 days, or stopping early!"
     )
 
 
 def _generate_itinerary_fallback(query: str, dest: str) -> str:
     m = re.search(r"(\d+)\s*(?:day|days)", query, re.IGNORECASE)
+    if not m:
+        m = re.search(r"(\d+)\s*(?:night|nights)", query, re.IGNORECASE)
     days = int(m.group(1)) if m else 5
-    days = min(max(days, 3), 10)
+    days = min(max(days, 1), 30)  # Support full trip duration up to 30 days without arbitrary 10-day cap
 
     dest_lower = (dest or "").lower()
     is_japan = any(x in dest_lower for x in ["japan", "tokyo", "kyoto", "osaka", "nara", "hakone", "hokkaido"])
@@ -82,6 +84,30 @@ def _generate_itinerary_fallback(query: str, dest: str) -> str:
                 "Afternoon shopping for matcha, Japanese knives, and regional treats in upscale Ginza and historic Nihonbashi.",
                 "Celebratory farewell dinner at a panoramic rooftop dining lounge overlooking illuminated Tokyo Tower and Tokyo Skytree.",
             ),
+            (
+                "Kamakura Great Buddha & Coastal Enoshima Island",
+                "Scenic morning train to seaside Kamakura; stand before the colossal 13th-century bronze Kotoku-in Great Buddha.",
+                "Walk along Yuigahama beach and ride the vintage Enoden coastal train to picturesque Enoshima Island for fresh seafood rice bowls.",
+                "Sunset views across Sagami Bay with Mt. Fuji silhouettes, followed by dinner at a seaside terrace.",
+            ),
+            (
+                "Hiroshima Peace Memorial & Floating Torii of Miyajima",
+                "Morning Shinkansen to Hiroshima; walk through the inspiring Peace Memorial Park and Museum.",
+                "Short scenic ferry to sacred Miyajima Island to view the world-famous Itsukushima Shrine torii gate floating on high tide.",
+                "Sample Hiroshima-style layered savory Okonomiyaki and fresh grilled Hiroshima oysters.",
+            ),
+            (
+                "Kanazawa Samurai Quarters & Kenroku-en Gardens",
+                "High-speed Hokuriku Shinkansen to historic Kanazawa; stroll through Kenroku-en, celebrated as one of Japan's top 3 landscape gardens.",
+                "Wander preserved Edo-era Nagamachi samurai stone-walled alleys and sample gold-leaf soft cream.",
+                "Fresh seafood dinner at Omicho Market sampling sweet shrimp and snow crab.",
+            ),
+            (
+                "Yokohama Waterfront, Chinatown & Sky Gardens",
+                "Explore futuristic Minato Mirai harbor, ride the waterfront urban ropeway, and stroll the historic Red Brick Warehouses.",
+                "Feast on authentic dim sum and Peking duck inside Japan's largest Chinatown.",
+                "Evening cocktails with 360-degree night skyline views from Yokohama Landmark Tower Sky Garden.",
+            ),
         ]
     elif is_italy:
         plans = [
@@ -115,12 +141,48 @@ def _generate_itinerary_fallback(query: str, dest: str) -> str:
                 "Visit St. Mark's Basilica, Doge's Palace, and walk over the Bridge of Sighs.",
                 "Savor authentic Venetian cicchetti (tapas) and prosecco in the peaceful back canals of Cannaregio.",
             ),
+            (
+                "Tuscan Countryside, Siena & Chianti Hills",
+                "Scenic morning drive through rolling cypress-lined Tuscan hills to medieval Siena and its shell-shaped Piazza del Campo.",
+                "Visit a family-owned Chianti vineyard for olive oil tasting, aged balsamic vinegar, and regional pasta pairing.",
+                "Sunset stroll through the fortified hill town of San Gimignano sampling world-champion gelato.",
+            ),
+            (
+                "Milan Fashion Capital & The Last Supper",
+                "Morning arrival in Milan; marvel at the white marble spires of the Milan Duomo and walk the Galleria Vittorio Emanuele II.",
+                "Viewing of Leonardo da Vinci's legendary 'The Last Supper' inside Santa Maria delle Grazie.",
+                "Evening Milanese aperitivo in the vibrant canal-side Navigli district.",
+            ),
+            (
+                "Amalfi Coast, Positano Cliffside & Lemon Groves",
+                "High-speed transit south to Naples and scenic coastal drive to dramatic cliffside Positano.",
+                "Stroll pebble beaches, browse linen boutiques, and enjoy fresh seafood spaghetti al limone.",
+                "Evening ferry ride along the dramatic Amalfi cliffs with sunset aperitivo in Amalfi town.",
+            ),
+            (
+                "Ruins of Pompeii & Panoramic Mount Vesuvius",
+                "Guided morning walk through the hauntingly preserved Roman streets, villas, and thermal baths of ancient Pompeii.",
+                "Scenic ascent up Mount Vesuvius crater for sweeping panoramas over the Bay of Naples.",
+                "Authentic wood-fired Neapolitan Margherita pizza dinner in Naples.",
+            ),
+            (
+                "Lake Como Glitz, Bellagio & Villa Gardens",
+                "Day trip to Lake Como; board a scenic passenger ferry across the Y-shaped alpine lake to picturesque Bellagio.",
+                "Explore the botanical terraced gardens of Villa Melzi and lakeside cafes.",
+                "Lakeside risotto con pesce persico (perch) dinner watching mountain reflections.",
+            ),
+            (
+                "Bologna Food Capital & Historic Porticoes",
+                "Morning in culinary capital Bologna; climb the medieval Asinelli Tower and wander miles of UNESCO porticoes.",
+                "Gastronomic lunch featuring authentic Tagliatelle al Ragù and handmade tortellini in brodo.",
+                "Farewell Italian feast at a historic osteria celebrating an unforgettable journey.",
+            ),
         ]
     else:
         plans = [
             (
                 "Arrival, Historic City Center & Sunset Stroll",
-                f"Arrive in {dest}, check into your central hotel, and take an orientation walk through the lively historic center.",
+                f"Arrive in {dest}, check into your central accommodation, and take an orientation walk through the lively historic center.",
                 f"Sample authentic local street food and regional delicacies at a vibrant central food hall in {dest}.",
                 f"Sunset viewing from an iconic city lookout point, followed by a welcome dinner at a traditional neighborhood restaurant.",
             ),
@@ -128,7 +190,7 @@ def _generate_itinerary_fallback(query: str, dest: str) -> str:
                 "Iconic Heritage Landmarks & Cultural Discovery",
                 f"Morning guided exploration of the premier historic monuments, architectural landmarks, and heritage squares in {dest}.",
                 f"Relaxed lunch at an authentic, family-run eatery sampling regional dishes cooked with seasonal ingredients.",
-                f"Evening stroll along pedestrian avenues, artisan boutiques, and cozy local cafes with live music.",
+                f"Evening stroll along pedestrian avenues, artisan boutiques, and cozy local cafes with live acoustic music.",
             ),
             (
                 "Arts, Hidden Courtyards & Historic Neighborhoods",
@@ -143,10 +205,64 @@ def _generate_itinerary_fallback(query: str, dest: str) -> str:
                 f"Return to the city for a relaxing evening, craft cocktails or tea lounge, and dinner at a vibrant night market.",
             ),
             (
-                "Cultural Workshops & Panoramic Farewell Dinner",
-                f"Morning visit to local artisan workshops, botanical gardens, or historic estates.",
-                f"Casual lunch at a popular neighborhood food spot loved by residents.",
-                f"Celebratory farewell dinner at a panoramic rooftop restaurant overlooking the sparkling night skyline of {dest}.",
+                "Local Artisan Workshops & Gastronomic Food Walk",
+                f"Morning visit to traditional artisan studios, ceramic workshops, and historic master craftspeople.",
+                f"Guided culinary tasting tour through neighborhood delis, bakeries, and heritage spice stalls in {dest}.",
+                f"Evening riverside or harbor promenade stroll, followed by dinner featuring fresh regional catches.",
+            ),
+            (
+                "Full-Day Scenic Mountain / Coastal Excursion",
+                f"Full-day expedition exploring dramatic mountain trails, hidden waterfalls, or pristine coastal coves outside {dest}.",
+                f"Picnic lunch or rustic village tavern dining with sweeping panoramic views.",
+                f"Return to town for an evening thermal bath, spa recharge, and relaxed fireside dining.",
+            ),
+            (
+                "Architectural Wonders, Botanic Gardens & Craft Bazaars",
+                f"Morning walking tour through iconic modern and heritage architectural quarters, followed by lush botanical gardens.",
+                f"Lunch at a garden greenhouse cafe sampling farm-to-table organic specialties.",
+                f"Evening visit to the vibrant night craft bazaar, browsing handmade textiles and jewelry.",
+            ),
+            (
+                "Off-the-Beaten-Path Treasures & Quiet Viewpoints",
+                f"Explore tranquil secret neighborhoods and residential quarters away from tourist crowds.",
+                f"Cozy lunch in a hidden garden osteria loved by local artists and residents.",
+                f"Golden hour photography from a quiet panoramic hill terrace overlooking {dest}.",
+            ),
+            (
+                "Culinary Masterclass & Waterfront Dining",
+                f"Hands-on morning cooking workshop learning traditional regional sauce-making, dough kneading, and seasoning.",
+                f"Feast on your own hand-crafted culinary creations paired with local refreshments.",
+                f"Evening sunset boat cruise along the city canal or bay, followed by waterfront seafood dining.",
+            ),
+            (
+                "Lively Neighborhood Quarters, Cafes & Galleries",
+                f"Morning immersion into the indie arts district, independent bookstores, and specialty coffee roasteries.",
+                f"Casual street-side cafe lunch watching the rhythm of daily local life.",
+                f"Evening live cultural performance, theater, or rooftop music lounge.",
+            ),
+            (
+                "High-Altitude Panoramic Lookouts & Historic Fortresses",
+                f"Morning cable car or scenic funicular ride to the highest panoramic mountain overlook or fortress ramparts.",
+                f"Alpine or fortress terrace lunch enjoying sweeping 360-degree vistas.",
+                f"Afternoon leisurely descent through pine forests or terraced vineyards back into the city.",
+            ),
+            (
+                "Lakeside or Valley Countryside Retreat",
+                f"Full-day excursion to tranquil nearby lakes or lush agricultural valleys; rent a bicycle or rowing boat.",
+                f"Farmhouse lunch with locally pressed olive oil, artisan cheeses, and warm stone-baked bread.",
+                f"Evening return to {dest} for a peaceful dinner in a candlelit courtyard.",
+            ),
+            (
+                "Modern Cultural Hubs, Shopping & Sunset Cocktails",
+                f"Morning exploration of contemporary design museums, cutting-edge architectural hubs, and boutique shopping boulevards.",
+                f"Gourmet lunch at an acclaimed bistro inside the cultural quarter.",
+                f"Sunset rooftop lounge drinks overlooking the glittering skyline of {dest}.",
+            ),
+            (
+                "Celebratory Farewell Feast & Illuminated City Skyline",
+                f"Morning relaxed souvenir shopping, collecting artisan teas, local delicacies, and cherished mementos.",
+                f"Farewell lunch at a classic neighborhood institution, reminiscing over the journey's highlights.",
+                f"Grand celebratory multi-course dinner at a premier panoramic dining venue overlooking the illuminated monuments of {dest}.",
             ),
         ]
 
@@ -191,6 +307,25 @@ def itinerary_agent(state: TravelState):
     # Guaranteed fallback if LLM failed or generated error message
     if not itinerary or "error" in itinerary.lower() or len(itinerary) < 80:
         itinerary = _generate_itinerary_fallback(user_query, dest)
+
+    # Verify completeness: if user explicitly requested N days and LLM truncated early, complete all missing days
+    m_days = re.search(r"(\d+)\s*(?:day|days)", user_query, re.IGNORECASE)
+    if not m_days:
+        m_days = re.search(r"(\d+)\s*(?:night|nights)", user_query, re.IGNORECASE)
+    if m_days:
+        target_days = min(int(m_days.group(1)), 30)
+        gen_days = len(re.findall(r"(?:^|\n)\s*#{0,6}\s*Day\s*\d+", itinerary, re.IGNORECASE))
+        if gen_days < target_days:
+            # If severely truncated, synthesize complete fallback with all days
+            if gen_days <= 2 and target_days > 3:
+                itinerary = _generate_itinerary_fallback(user_query, dest)
+            else:
+                fallback_full = _generate_itinerary_fallback(user_query, dest)
+                # Append each missing day block
+                for missing_d in range(gen_days + 1, target_days + 1):
+                    missing_match = re.search(rf"(###\s*Day\s*{missing_d}:[\s\S]*?)(?=(?:###\s*Day\s*\d+|\Z))", fallback_full)
+                    if missing_match:
+                        itinerary += "\n\n" + missing_match.group(1).strip()
 
     return {
         "itinerary": itinerary,
