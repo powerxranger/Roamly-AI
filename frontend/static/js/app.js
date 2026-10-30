@@ -42,6 +42,7 @@
   var THEME_KEY = "travelbrain.theme";
 
   var threadId = null;   // LangGraph conversation thread for the current trip
+  var activeDestination = null; // Active itinerary destination for subsequent follow-ups
   var busy = false;
   var config = null;     // last /api/config payload
   var savingConfig = false;
@@ -580,20 +581,82 @@
     return wrap;
   }
 
-  function extractDestination(text) {
-    if (!text) return null;
-    var t = String(text);
-    var m = t.match(/(?:to|in)\s+([A-Za-z][A-Za-z\s,&-]{2,50}?)(?=\s+from|\s+for|\s+in\s+\d|\s+with|\s+on|\s+departing|\.|,|\n|$)/i);
-    if (!m) m = t.match(/trip\s+to\s+([A-Za-z][A-Za-z\s,&-]{2,50})/i);
-    if (!m) return null;
-    return m[1].replace(/\b(?:like|maybe|please|just)\b/gi, "").replace(/\s+/g, " ").trim();
+  function isGreetingOrBanter(text) {
+    if (!text) return false;
+    var s = String(text).toLowerCase().replace(/[?!.,;]+$/, '').trim();
+    return /^(?:hey+|heya|heyo|hello+|hi+|hiya+|yo+|sup|howdy|aloha|hola|bonjour|greetings?)\b/i.test(s) ||
+      /\b(?:how(?:'s| is|s)?\s*(?:it|things?|you|u|life)|what(?:'s|s)?\s*up|how\s+are\s+you|how\s+its\s+going|how\s+it\s+going)\b/i.test(s) ||
+      /\b(?:how\s+are\s+things|how\s+are\s+you\s+doing)\b/i.test(s) ||
+      /^(?:bro|mate|dude|buddy|friend)\b/i.test(s);
   }
 
   function extractOrigin(text) {
     if (!text) return null;
     var t = String(text);
-    var m = t.match(/from\s+([A-Za-z][A-Za-z\s,&-]{2,30}?)(?=\s+to|\s+in|\s+for|\s+with|\s+on|\.|,|\n|$)/i);
-    return m ? m[1].replace(/\s+/g, " ").trim() : null;
+    var m = t.match(/\b(?:from|departing\s+from|departing|leaving\s+from|leaving|out\s+of|origin[:\s]+)\s+([A-Za-z\s,-]{2,30}?)(?=[.,;!?]|\s+(?:to\b|in\b|for\b|with\b|on\b|during\b|departing\b|under\b|budget\b|find\b|flights?\b|hotels?\b|weather\b|and\b|$)|$)/i);
+    if (!m) return null;
+    var res = m[1].replace(/^[,\s.-]+|[,\s.-]+$/g, "").replace(/\s+/g, " ").trim();
+    if (/^(?:chaos|scratch|home|now|here|me|there|airport|centre|center)$/i.test(res)) return null;
+    return res.length >= 2 ? res : null;
+  }
+
+  function extractDestination(text) {
+    if (!text) return null;
+    var t = String(text);
+    if (isGreetingOrBanter(t)) {
+      var majors = ["Saudi Arabia", "AlUla", "Riyadh", "Jeddah", "Abha", "Dubai", "UAE", "Abu Dhabi", "Japan", "Tokyo", "Kyoto", "Osaka", "Bali", "Paris", "Rome", "Italy", "Switzerland", "London"];
+      for (var i = 0; i < majors.length; i++) {
+        if (new RegExp("\\b" + majors[i] + "\\b", "i").test(t)) {
+          return majors[i];
+        }
+      }
+      return null;
+    }
+
+    // Extract Origin first so it is NEVER mistaken for Destination
+    var origin = extractOrigin(t);
+    var origLower = origin ? origin.toLowerCase() : null;
+
+    // 1. "from [origin] to [destination]"
+    var mFromTo = t.match(/\bfrom\s+[A-Za-z\s,-]{2,25}?\s+to\s+([A-Za-z\s,-]{2,25})/i);
+    if (mFromTo && mFromTo[1]) {
+      var cFromTo = mFromTo[1].replace(/\b(?:like|maybe|please|just)\b/gi, "").trim();
+      if (cFromTo && (!origLower || cFromTo.toLowerCase() !== origLower)) return cFromTo;
+    }
+
+    // 2. "[destination] (?:trip|vacation|getaway|tour|holiday|itinerary)" e.g. "5 day Paris trip" -> "Paris"
+    var mTrip = t.match(/\b([A-Za-z\s]{2,25}?)\s+(?:trip|getaway|vacation|tour|holiday|itinerary)\b/i);
+    if (mTrip && mTrip[1]) {
+      var rawC = mTrip[1].replace(/\b(?:want|wanna|plan|create|build|need|book|a|an|the|\d+|day|days|night|nights|beach|scenic|rail|short|long|budget|luxury|solo|family|custom)\b/gi, "").trim();
+      if (rawC && rawC.length >= 2 && (!origLower || rawC.toLowerCase() !== origLower)) {
+        return rawC;
+      }
+    }
+
+    // 3. Dedicated check for calm places in [destination]
+    var mCalm = t.match(/\b(?:calm|peaceful|quiet|scenic|relaxing|hidden)\s+(?:place|places|spot|spots|retreat)\s+(?:in|around|at|of)\s+([A-Za-z\s,-]{2,30})/i);
+    if (mCalm && mCalm[1]) {
+      var c = mCalm[1].replace(/\b(?:like|maybe|please|just|chaos|free time|locate me)\b/gi, "").trim();
+      if (c && c.length <= 30 && (!origLower || c.toLowerCase() !== origLower)) return c;
+    }
+
+    // 4. Known Major destinations, strictly excluding origin
+    var majors = ["Saudi Arabia", "AlUla", "Riyadh", "Jeddah", "Abha", "Dubai", "UAE", "Abu Dhabi", "Japan", "Tokyo", "Kyoto", "Osaka", "Bali", "Paris", "Rome", "Italy", "Switzerland", "London"];
+    for (var i = 0; i < majors.length; i++) {
+      if (origLower && (majors[i].toLowerCase() === origLower || origLower.includes(majors[i].toLowerCase()) || majors[i].toLowerCase().includes(origLower))) {
+        continue;
+      }
+      if (new RegExp("\\b" + majors[i] + "\\b", "i").test(t)) {
+        return majors[i];
+      }
+    }
+
+    var m = t.match(/(?:to|visit|explore|travel to)\s+([A-Za-z][A-Za-z\s,&-]{2,35}?)(?=[.,;!?]|\s+(?:from|for|in\s+\d|with|on|departing|under|budget|\.|\,|$)|$)/i);
+    if (!m) m = t.match(/trip\s+to\s+([A-Za-z][A-Za-z\s,&-]{2,35})/i);
+    if (!m) return null;
+    var res = m[1].replace(/\b(?:like|maybe|please|just|chaos|wanna|free time|locate me|some calm)\b/gi, "").replace(/\s+/g, " ").trim();
+    if (origLower && res.toLowerCase() === origLower) return null;
+    return (res.length > 30 || /\b(?:chaos|free time)\b/i.test(res)) ? null : res;
   }
 
   function extractTravellers(text) {
@@ -803,6 +866,74 @@
       body.appendChild(list);
       updateProgress();
     }
+
+    // Add personal item adder form (appended at last)
+    var addForm = el("form", "packing-add-row");
+    addForm.style.display = "flex";
+    addForm.style.gap = "8px";
+    addForm.style.marginTop = "14px";
+    addForm.style.flexWrap = "wrap";
+
+    var addInput = document.createElement("input");
+    addInput.type = "text";
+    addInput.placeholder = "+ Add personal item (e.g., Camera lens, medicines, hiking boots)...";
+    addInput.className = "packing-add-text";
+    addInput.style.flex = "1";
+    addInput.style.minWidth = "200px";
+    addInput.style.padding = "8px 12px";
+    addInput.style.borderRadius = "8px";
+    addInput.style.border = "1px solid var(--border-strong)";
+    addInput.style.background = "var(--surface-2)";
+    addInput.style.color = "var(--text)";
+    addInput.style.fontSize = "13px";
+
+    var addBtn = el("button", "btn btn-primary btn-sm packing-add-submit", "+ Add to List");
+    addBtn.type = "submit";
+    addBtn.style.padding = "0 14px";
+    addBtn.style.height = "36px";
+    addBtn.style.borderRadius = "8px";
+    addBtn.style.fontWeight = "600";
+    addBtn.style.cursor = "pointer";
+
+    addForm.appendChild(addInput);
+    addForm.appendChild(addBtn);
+
+    addForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var val = (addInput.value || "").trim();
+      if (!val) return;
+
+      var lastGroup = list.querySelector(".packing-group-custom");
+      if (!lastGroup) {
+        lastGroup = el("div", "packing-group packing-group-custom");
+        var gh = el("div", "packing-group-head");
+        gh.innerHTML = "<strong>🎒 Personal & Custom Items</strong>";
+        lastGroup.appendChild(gh);
+        var gb = el("div", "packing-group-body");
+        lastGroup.appendChild(gb);
+        list.appendChild(lastGroup);
+      }
+
+      var targetBody = lastGroup.querySelector(".packing-group-body") || lastGroup;
+      var item = el("label", "packing-item");
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      allCheckboxes.push(cb);
+      cb.addEventListener("change", function () {
+        item.classList.toggle("packed", cb.checked);
+        updateProgress();
+      });
+      item.appendChild(cb);
+      var itemSpan = el("span");
+      itemSpan.textContent = val + " — Custom personal item";
+      item.appendChild(itemSpan);
+      targetBody.appendChild(item);
+
+      addInput.value = "";
+      updateProgress();
+    });
+
+    body.appendChild(addForm);
     wrap.appendChild(body);
     return wrap;
   }
@@ -1150,6 +1281,125 @@
       return n.toLocaleString("en-US");
     }
 
+    function formatConvertedNumber(val, curr) {
+      if (val >= 1) {
+        var rounded = Math.round(val);
+        if (curr === "INR") return rounded.toLocaleString("en-IN");
+        return rounded.toLocaleString("en-US");
+      }
+      if (val > 0) return val.toFixed(2);
+      return "0";
+    }
+
+    function getCurrencyFromToken(tok, fallback) {
+      if (!tok) return fallback;
+      var t = tok.trim();
+      if (t === "₹" || /^Rs\.?$/i.test(t) || /^INR$/i.test(t)) return "INR";
+      if (t === "$" || /^USD$/i.test(t)) return "USD";
+      if (t === "€" || /^EUR$/i.test(t)) return "EUR";
+      if (t === "£" || /^GBP$/i.test(t)) return "GBP";
+      if (t === "¥" || /^JPY$/i.test(t)) return "JPY";
+      return fallback;
+    }
+
+    function transformBudgetText(rawText, baseCurr, toCurr) {
+      if (!rawText) return "";
+      baseCurr = baseCurr || "INR";
+      toCurr = toCurr || "INR";
+      if (baseCurr === toCurr) return rawText;
+
+      var tokens = [];
+      function saveToken(str) {
+        var id = "__ROAMLY_CURR_TOKEN_" + tokens.length + "__";
+        tokens.push(str);
+        return id;
+      }
+
+      var out = String(rawText);
+
+      // 1. Dual currency mentions e.g. (¥800 / ₹450) or ¥1,500 / ₹830 or ₹45,000 / $550
+      out = out.replace(
+        /(?:[([]\s*)?([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)\s*(?:\/|\s+(?:or|approx\.?|about|~)\s+)\s*([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)(?:\s*[)\]])?/gi,
+        function (match, sym1, num1, sym2, num2) {
+          var c1 = getCurrencyFromToken(sym1, baseCurr);
+          var c2 = getCurrencyFromToken(sym2, baseCurr);
+          var v1 = parseFloat(num1.replace(/,/g, ""));
+          var v2 = parseFloat(num2.replace(/,/g, ""));
+          var converted;
+          if (c1 === toCurr) converted = v1;
+          else if (c2 === toCurr) converted = v2;
+          else converted = v1 * ((rates[toCurr] || 1) / (rates[c1] || 1));
+          return saveToken(symbols[toCurr] + formatConvertedNumber(converted, toCurr));
+        }
+      );
+
+      // 2. Lakhs notation
+      out = out.replace(
+        /(?:([₹$€£¥]|Rs\.?|INR)\s*)?(\d+(?:\.\d+)?)\s*(?:lakhs?|lacs?)\b/gi,
+        function (match, sym, numStr) {
+          var valInInr = parseFloat(numStr) * 100000;
+          var ratio = (rates[toCurr] || 1) / (rates["INR"] || 1);
+          return saveToken(symbols[toCurr] + formatConvertedNumber(valInInr * ratio, toCurr));
+        }
+      );
+
+      // 3. Number Ranges
+      out = out.replace(
+        /([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)\s*(?:–|—|-|to|\band\b)\s*([₹$€£¥]|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)/gi,
+        function (match, sym1, num1, sym2, num2) {
+          var src1 = getCurrencyFromToken(sym1, baseCurr);
+          var src2 = sym2 ? getCurrencyFromToken(sym2, src1) : src1;
+          var v1 = parseFloat(num1.replace(/,/g, ""));
+          var v2 = parseFloat(num2.replace(/,/g, ""));
+          if (isNaN(v1) || isNaN(v2)) return match;
+          var c1 = v1 * ((rates[toCurr] || 1) / (rates[src1] || 1));
+          var c2 = v2 * ((rates[toCurr] || 1) / (rates[src2] || 1));
+          return saveToken(symbols[toCurr] + formatConvertedNumber(c1, toCurr) + " – " + symbols[toCurr] + formatConvertedNumber(c2, toCurr));
+        }
+      );
+
+      // 4. Single amounts
+      out = out.replace(
+        /([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)/gi,
+        function (match, sym, numStr) {
+          var src = getCurrencyFromToken(sym, baseCurr);
+          var v = parseFloat(numStr.replace(/,/g, ""));
+          if (isNaN(v)) return match;
+          var c = v * ((rates[toCurr] || 1) / (rates[src] || 1));
+          return saveToken(symbols[toCurr] + formatConvertedNumber(c, toCurr));
+        }
+      );
+
+      // 5. Trailing currency notation (e.g. 45,000 INR, 45,000/-, 45000 Rs)
+      out = out.replace(
+        /([\d,]+(?:\.\d+)?)\s*(?:-\/|\/-\s*(?:INR)?|\b(?:INR|Rs\.?)\b)/gi,
+        function (match, numStr) {
+          var v = parseFloat(numStr.replace(/,/g, ""));
+          if (isNaN(v)) return match;
+          var c = v * ((rates[toCurr] || 1) / (rates["INR"] || 1));
+          return saveToken(symbols[toCurr] + formatConvertedNumber(c, toCurr));
+        }
+      );
+
+      // 6. Currency labels and phrases
+      out = out
+        .replace(/\b(?:in\s+)?Indian\s+Rupees\s*(?:\(INR\))?/gi, "in " + toCurr + " (" + symbols[toCurr] + ")")
+        .replace(/\b(?:in\s+)?Rupees\b/gi, "in " + toCurr)
+        .replace(/\b(?:in\s+)?INR\b/gi, toCurr)
+        .replace(/\bCurrency:\s*(?:INR|USD|EUR|GBP|JPY)\b/gi, "Currency: " + toCurr)
+        .replace(/\b(?:All\s+prices|Prices|Estimated\s+Cost|Cost)\s+in\s+[₹$€£¥]/gi, "Prices in " + symbols[toCurr])
+        .replace(/\([₹$€£¥]\)/g, "(" + symbols[toCurr] + ")");
+
+      // 7. Restore tokens
+      tokens.forEach(function (val, idx) {
+        out = out.replace("__ROAMLY_CURR_TOKEN_" + idx + "__", val);
+      });
+
+      return out;
+    }
+
+    var mdBlockEl = mdBlock(transformBudgetText(text, detectedCurr, currentCurr), "No budget breakdown available.");
+
     function updateSplit() {
       var convertedTotal = Math.round(baseUsd * rates[currentCurr]);
       var perPerson = Math.round(convertedTotal / currentPeople);
@@ -1161,11 +1411,16 @@
           legendItems[seg.name].val.textContent = symbols[currentCurr] + " " + formatNumber(segAmt, currentCurr);
         }
       });
+
+      if (mdBlockEl) {
+        var convertedText = transformBudgetText(text, detectedCurr, currentCurr);
+        mdBlockEl.innerHTML = window.MD && window.MD.render ? window.MD.render(convertedText) : convertedText;
+      }
     }
 
     updateSplit();
     body.appendChild(calcBar);
-    body.appendChild(mdBlock(text, "No budget breakdown available."));
+    body.appendChild(mdBlockEl);
     wrap.appendChild(body);
     return wrap;
   }
@@ -1240,19 +1495,30 @@
   /* ---------------- feature 7: quick follow-up action chips ---------------- */
 
   function renderFollowupChips(dest) {
-    if (!dest) return null;
-    var suggestions = [
-      "🍝 Best local street food & budget eats in " + dest,
-      "🚇 Public transport guide & transit passes for " + dest,
-      "🌧️ Rainy day & bad weather backup itinerary in " + dest,
-      "💡 Top travel scams to avoid & safety tips for " + dest,
-      "📸 5 most photogenic hidden photo spots in " + dest
-    ];
+    var cleanDest = dest ? String(dest).replace(/^[,.\s-]+|[,.\s-]+$/g, "").trim() : "";
+    var isInvalid = !cleanDest || cleanDest.length < 2 || cleanDest.length > 30 || /[?!]/.test(cleanDest) ||
+      /\b(?:how|its|going|bro|hey|hello|doing|asking|wanna|chaos|locate|free time|destination|custom)\b/i.test(cleanDest);
+
+    var suggestions = !isInvalid
+      ? [
+          "🍝 Best local street food & budget eats in " + cleanDest,
+          "🚇 Public transport guide & transit passes for " + cleanDest,
+          "🌧️ Rainy day & bad weather backup itinerary in " + cleanDest,
+          "💡 Top travel scams to avoid & safety tips for " + cleanDest,
+          "📸 5 most photogenic hidden photo spots in " + cleanDest
+        ]
+      : [
+          "🏜️ Calm & peaceful retreats in Saudi Arabia away from chaos",
+          "🌸 7-day Japan trip focused on food, temples and culture",
+          "✨ Curated local food and hidden gems in Dubai",
+          "🍕 Authentic trattorias and historic walks in Rome, Italy",
+          "🏔️ Scenic mountain rail & lakeside getaway in Switzerland"
+        ];
 
     var wrap = el("div", "followup-chips-wrap");
     var title = el("div", "followup-chips-title");
     title.appendChild(icon("M13 10V3L4 14h7v7l9-11h-7z"));
-    title.appendChild(el("span", null, "Ask a Follow-up Question"));
+    title.appendChild(el("span", null, !isInvalid ? "Ask a Follow-up Question" : "Popular Travel Inspirations & Questions"));
     wrap.appendChild(title);
 
     var list = el("div", "followup-chips-list");
@@ -1667,7 +1933,7 @@
     fetch("/api/travel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: message, thread_id: threadId })
+      body: JSON.stringify({ message: message, thread_id: threadId, destination: activeDestination })
     })
       .catch(function (e) {
         e.__kind = "network";
@@ -1693,6 +1959,9 @@
         data.__query = message;
         data.__title = deriveTripTitle(message);
         threadId = data.thread_id || threadId;
+        if (data.destination && !/your destination/i.test(data.destination)) {
+          activeDestination = data.destination;
+        }
 
         // A rendering bug here must not be reported as an agent failure.
         try {
@@ -1742,6 +2011,7 @@
   function startNewTrip() {
     if (busy) { toast("Wait for the current plan to finish."); return; }
     threadId = null;
+    activeDestination = null;
     messages.innerHTML = "";
     updateEmptyState();
     if (isReady()) input.focus();

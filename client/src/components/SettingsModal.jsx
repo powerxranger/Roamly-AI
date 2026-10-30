@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { saveConfig, resetConfig } from '../services/api'
 
 export default function SettingsModal({
@@ -22,11 +23,18 @@ export default function SettingsModal({
   }, [isOpen])
 
   useEffect(() => {
+    if (!isOpen) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) onClose()
+      if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
   }, [isOpen, onClose])
 
   if (!isOpen) return null
@@ -101,10 +109,16 @@ export default function SettingsModal({
     }
   }
 
-  return (
-    <>
-      <div className="modal-scrim" onClick={onClose}></div>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  return createPortal(
+    <div className="modal-portal-wrapper">
+      <div className="modal-scrim" onClick={onClose} />
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settingsTitle"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-head">
           <div className="modal-heading">
             <h2 id="settingsTitle">Settings</h2>
@@ -194,6 +208,7 @@ export default function SettingsModal({
           </button>
         </div>
       </div>
-    </>
+    </div>,
+    document.body
   )
 }

@@ -2,10 +2,14 @@ import React from 'react'
 
 export default function Header({
   onOpenPreferences,
+  onOpenHistory,
+  onOpenAuth,
   onNewTrip,
   theme,
   onToggleTheme,
-  currency = 'INR'
+  currency = 'INR',
+  tripCount = 0,
+  user = null
 }) {
   const currencySymbols = {
     INR: '₹',
@@ -30,6 +34,18 @@ export default function Header({
       </a>
 
       <div className="topbar-actions">
+        {/* Saved Trips Archive Drawer */}
+        <button
+          className="btn btn-soft btn-sm btn-history-trigger"
+          onClick={onOpenHistory}
+          type="button"
+          title="View your saved trip history"
+        >
+          <span className="pref-btn-icon">🧭</span>
+          <span className="btn-label">My Trips</span>
+          {tripCount > 0 && <span className="history-count-pill">{tripCount}</span>}
+        </button>
+
         {/* Interactive Trip Preferences & Currency Switcher */}
         <button
           className="btn btn-soft btn-sm btn-pref-trigger"
@@ -48,6 +64,28 @@ export default function Header({
           </svg>
           <span className="btn-label">New trip</span>
         </button>
+
+        {/* User Account / Profile */}
+        {user ? (
+          <button
+            className={`btn btn-sm user-profile-btn ${user.isGuest ? 'btn-soft is-guest-btn' : 'btn-soft'}`}
+            onClick={onOpenAuth}
+            type="button"
+            title={user.isGuest ? 'Guest Session — Click to Sign In or Create Account' : `Account: ${user.name} (${user.email})`}
+          >
+            <span className="user-avatar-pill">{user.avatar || '👤'}</span>
+            <span className="btn-label user-name-label">{user.isGuest ? 'Guest (Sign In)' : user.name.split(' ')[0]}</span>
+          </button>
+        ) : (
+          <button
+            className="btn btn-primary btn-sm user-signin-btn"
+            onClick={onOpenAuth}
+            type="button"
+            title="Sign in to save trips and customize itineraries"
+          >
+            <span className="btn-label">Sign In</span>
+          </button>
+        )}
 
         <button className="icon-btn" onClick={onToggleTheme} type="button" aria-label="Toggle colour theme" title="Toggle theme">
           {theme === 'dark' ? (

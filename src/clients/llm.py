@@ -18,27 +18,28 @@ from src.config.settings import (
 
 logger = logging.getLogger(__name__)
 
-# High-capacity production Groq models.
-# llama-3.3-70b and llama-3.1-8b each have 1,000,000 Tokens Per Day (TPD)
-# and 128,000+ Tokens Per Minute (TPM), preventing 413 and 429 rate limits.
+# High-capacity active production Groq models.
+# llama-3.3-70b-versatile and llama-3.1-8b-instant provide 1,000,000 Tokens Per Day (TPD)
+# and 128,000+ Tokens Per Minute (TPM), preventing rate limit exhaustion.
 PRODUCTION_MODELS = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "llama3-70b-8192",
-    "llama3-8b-8192",
+    "gemma2-9b-it",
 ]
 
 
 @lru_cache(maxsize=32)
 def _build_raw_llm(model: str, api_key: str, max_tokens: int, temperature: float) -> ChatGroq:
     clean_key = (api_key or "").strip()
-    return ChatGroq(
-        model=model,
-        api_key=clean_key,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        max_retries=1,
-    )
+    kwargs = {
+        "model": model,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "max_retries": 1,
+    }
+    if clean_key:
+        kwargs["api_key"] = clean_key
+    return ChatGroq(**kwargs)
 
 
 class ResilientChatGroq:
@@ -73,8 +74,8 @@ class ResilientChatGroq:
         for idx, model_name in enumerate(candidates):
             curr_max = self.default_max_tokens
 
-            # Keep max_tokens prudent to conserve quota
-            if "8b" in model_name.lower():
+            # Keep max_tokens prudent to conserve quota on smaller models
+            if any(s in model_name.lower() for s in ["8b", "9b", "3b"]):
                 curr_max = min(curr_max, 2500)
 
             client = _build_raw_llm(model_name, self.api_key, curr_max, self.temperature)
@@ -96,7 +97,7 @@ class ResilientChatGroq:
                 err_str = str(e).lower()
                 last_error = e
 
-                # Check for rate limit, quota, or availability issues
+                # Check for rate limit, quota, decommissioned endpoint, or availability issues
                 is_recoverable = any(
                     x in err_str
                     for x in [
@@ -114,6 +115,9 @@ class ResilientChatGroq:
                         "not found",
                         "service unavailable",
                         "503",
+                        "decommissioned",
+                        "model_decommissioned",
+                        "400",
                     ]
                 )
 

@@ -120,7 +120,7 @@ export default function PackingChecklist({ content }) {
       note: 'Custom personal item',
     }
 
-    setItems((prev) => [newItem, ...prev])
+    setItems((prev) => [...prev, newItem])
     setNewItemName('')
   }
 

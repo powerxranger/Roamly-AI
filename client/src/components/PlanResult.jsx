@@ -10,6 +10,8 @@ import FollowupChips from './FollowupChips'
 import FlightComparisonCard from './FlightComparisonCard'
 import HotelComparisonCard from './HotelComparisonCard'
 import TripOverviewCard from './TripOverviewCard'
+import TravelGuideModal from './TravelGuideModal'
+import CurrencyModal from './CurrencyModal'
 
 function toText(value) {
   if (value === null || value === undefined) return ''
@@ -33,75 +35,152 @@ function cleanLocation(str) {
   if (!str) return ''
   let s = String(str)
     .replace(/[#*`_~]/g, '')
-    .replace(/\b(?:like|maybe|please|just|want|plan|trip|vacation|getaway|explore|visit|looking for|help me|going to|travel to|freshest|dishes)\b/gi, '')
+    .replace(/\b(?:like|maybe|please|just|want|wanna|plan|trip|vacation|getaway|explore|visit|looking for|help me|going to|travel to|freshest|dishes|chaos|free time|locate me to|locate me|calm place in|calm places in|peaceful place in|quiet place in|some place in|place in|spots in|places in|away from)\b/gi, '')
     .replace(/\b(?:airport|international|intl|aeroporto|flughafen)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
 
   // Remove leading prepositions (e.g. "in Italy" -> "Italy")
-  s = s.replace(/^(?:the|a|an|in|to|from|at|near|for|around)\s+/i, '')
+  s = s.replace(/^(?:the|a|an|in|to|from|at|near|for|around|of)\s+/i, '')
   // Remove trailing prepositions and conjunctions (e.g. "Italy in" -> "Italy", "Rome for" -> "Rome")
   s = s.replace(/\s+(?:in|to|from|for|on|at|during|with|and|or|by|the|a|an)$/i, '')
   // Remove trailing and leading punctuation
   s = s.replace(/^[,.\s-]+|[,.\s-]+$/g, '')
+  if (
+    s.length < 2 ||
+    s.length > 30 ||
+    /[?!]/.test(s) ||
+    /\b(?:chaos|wanna|free time|locate|how|its|it's|going|bro|hey|hello|doing|asking|what|where)\b/i.test(s)
+  ) return ''
   return s.trim()
 }
 
-function extractDestination(queryText, flightText, answerText) {
-  // 1. From user query - stop strictly before prepositions like "in [month]", "from", "for"
-  if (queryText) {
-    const q = String(queryText).trim()
-    const m = q.match(/(?:^|\s)(?:to|visit|explore|travel to)\s+([A-Za-z\s,-]{2,30}?)(?=\s+(?:in\b|during\b|from\b|for\b|with\b|on\b|departing\b|under\b|budget\b|\d|\.|\,|$))/i)
-    if (m) {
-      const cleaned = cleanLocation(m[1])
-      if (cleaned && cleaned.length > 2 && !/destination|dishes|transit|food|airport/i.test(cleaned)) return cleaned
+function extractDestination(queryText, flightText, answerText, explicitDest) {
+  const q = String(queryText || '').trim()
+
+  // First detect Origin so it can never be mistaken for Destination
+  let origin = null
+  const mOrigin = q.match(
+    /\b(?:from|departing\s+from|departing|leaving\s+from|leaving|out\s+of|origin[:\s]+)\s+([A-Za-z\s,-]{2,25}?)(?=[.,;!?]|\s+(?:to\b|in\b|for\b|with\b|during\b|departing\b|under\b|budget\b|find\b|flights?\b|hotels?\b|weather\b|and\b|$)|$)/i
+  )
+  if (mOrigin) {
+    const rawO = cleanLocation(mOrigin[1]).toLowerCase()
+    if (rawO && !/^(?:chaos|scratch|home|now|here|me|there)$/i.test(rawO)) {
+      origin = rawO
     }
   }
 
-  // 2. From flight text: "Likely arrival airport: [Airport] in [City]" or "Arrival: [City]"
-  if (flightText) {
-    const arrMatch = String(flightText).match(/(?:likely\s+arrival\s+airport|arrival\s+airport|destination)[:\s]+([^,\n.(]+)/i)
-    if (arrMatch) {
-      const cleaned = cleanLocation(arrMatch[1])
-      if (cleaned && cleaned.length > 2 && cleaned.length < 35 && !/destination|dishes|transit|food/i.test(cleaned)) {
-        return cleaned
-      }
+  // If explicit destination is provided, check that it's NOT the departure origin
+  if (explicitDest && explicitDest.trim() && !/your destination|destination/i.test(explicitDest)) {
+    const cleaned = cleanLocation(explicitDest)
+    if (
+      cleaned &&
+      cleaned.length <= 35 &&
+      (!origin || (cleaned.toLowerCase() !== origin && !origin.includes(cleaned.toLowerCase()) && !cleaned.toLowerCase().includes(origin))) &&
+      !/\b(?:wanna|want|chaos|locate|free time|some calm|place in|how|its|going|bro|hey|hello)\b/i.test(cleaned)
+    ) {
+      return cleaned
     }
   }
 
-  // 3. From answer/itinerary: "Trip to [Destination]"
-  if (answerText) {
-    const headMatch = String(answerText).match(/(?:trip\s+to|itinerary\s+for|welcome\s+to|destination:)\s+([A-Za-z\s,-]{2,35})/i)
-    if (headMatch) {
-      const cleaned = cleanLocation(headMatch[1])
-      if (cleaned && cleaned.length > 2 && cleaned.length < 35 && !/destination|dishes|transit|food/i.test(cleaned)) {
-        return cleaned
-      }
+  // 1. "from [origin] to [destination]"
+  const mFromTo = q.match(/\bfrom\s+[A-Za-z\s,-]{2,25}?\s+to\s+([A-Za-z\s,-]{2,25})/i)
+  if (mFromTo && mFromTo[1]) {
+    const cand = cleanLocation(mFromTo[1])
+    if (cand && (!origin || cand.toLowerCase() !== origin)) return cand
+  }
+
+  // 2. "[destination] (?:trip|vacation|getaway|tour|holiday|itinerary)" e.g. "5 day Paris trip" -> "Paris"
+  const mTripPattern = q.match(/\b([A-Za-z\s]{2,25}?)\s+(?:trip|getaway|vacation|tour|holiday|itinerary)\b/i)
+  if (mTripPattern && mTripPattern[1]) {
+    const rawCand = mTripPattern[1].replace(/\b(?:want|wanna|plan|create|build|need|book|a|an|the|\d+|day|days|night|nights|beach|scenic|rail|short|long|budget|luxury|solo|family|custom)\b/gi, '').trim()
+    const cand = cleanLocation(rawCand)
+    if (cand && cand.length >= 2 && (!origin || (cand.toLowerCase() !== origin && !origin.includes(cand.toLowerCase()) && !cand.toLowerCase().includes(origin)))) {
+      return cand
     }
   }
 
-  // Check for common destination names
+  // 3. "calm place in [destination]"
+  const mCalm = q.match(/\b(?:calm|peaceful|quiet|scenic|relaxing|hidden)\s+(?:place|places|spot|spots|retreat|retreats|getaway)\s+(?:in|around|at|of)\s+([A-Za-z\s,-]{2,30})/i)
+  if (mCalm && mCalm[1]) {
+    const cand = cleanLocation(mCalm[1])
+    if (cand && (!origin || cand.toLowerCase() !== origin)) return cand
+  }
+
+  // 4. "to/visit/explore/getaway to [destination]"
+  const mTo = q.match(/\b(?:to|visit|explore|travel to|going to|getaway to|locate me to)\s+([A-Za-z\s,-]{2,25}?)(?=[.,;!?]|\s+(?:from|in|for|with|during|departing|under|budget|\.|\,|$)|$)/i)
+  if (mTo && mTo[1]) {
+    const cand = cleanLocation(mTo[1])
+    if (cand && (!origin || cand.toLowerCase() !== origin) && !/\b(?:chaos|free time|some calm)\b/i.test(cand)) return cand
+  }
+
   const commonDestinations = [
-    "Italy", "Rome", "Milan", "Florence", "Venice", "Paris", "France", "Tokyo", "Japan",
-    "London", "Barcelona", "Madrid", "Spain", "Bali", "Thailand", "Bangkok", "Dubai",
-    "Switzerland", "Greece", "Santorini", "Amsterdam", "Singapore", "New York", "Almaty"
+    "Saudi Arabia", "Riyadh", "Jeddah", "AlUla", "Abha", "Farasan Islands", "Dammam",
+    "Japan", "Tokyo", "Kyoto", "Osaka", "Hokkaido", "Nara", "Hakone", "Hiroshima",
+    "Italy", "Rome", "Milan", "Florence", "Venice", "Naples", "Amalfi",
+    "France", "Paris", "Nice", "Lyon", "Bordeaux",
+    "Spain", "Barcelona", "Madrid", "Seville", "Ibiza",
+    "United Kingdom", "London", "Edinburgh", "Scotland",
+    "Switzerland", "Zurich", "Geneva", "Lucerne", "Interlaken", "Zermatt",
+    "Thailand", "Bangkok", "Phuket", "Chiang Mai",
+    "Bali", "Indonesia", "Singapore", "Malaysia", "Kuala Lumpur",
+    "Greece", "Santorini", "Athens", "Mykonos", "Crete",
+    "Germany", "Berlin", "Munich", "Frankfurt",
+    "Netherlands", "Amsterdam", "Portugal", "Lisbon", "Porto",
+    "Austria", "Vienna", "Czech Republic", "Prague", "Hungary", "Budapest",
+    "Turkey", "Istanbul", "Cappadocia",
+    "Dubai", "UAE", "Abu Dhabi", "Qatar", "Doha", "Oman", "Muscat",
+    "USA", "New York", "San Francisco", "Los Angeles", "Hawaii",
+    "Australia", "Sydney", "Melbourne", "New Zealand",
+    "India", "Goa", "Kerala", "Jaipur", "Rajasthan", "Ladakh", "Kashmir",
+    "Maldives", "Sri Lanka", "Vietnam", "South Korea", "Seoul"
   ]
-  const fullText = `${queryText} ${answerText || ''}`
+
+  const fullText = `${queryText || ''} ${answerText || ''} ${flightText || ''}`
   for (const c of commonDestinations) {
+    if (origin && (c.toLowerCase() === origin || origin.includes(c.toLowerCase()) || c.toLowerCase().includes(origin))) {
+      continue
+    }
     if (new RegExp(`\\b${c}\\b`, 'i').test(fullText)) {
       return c
     }
   }
 
-  return 'Your Destination'
+  // From flight text: "Likely arrival airport: [Airport] in [City]" or "Arrival: [City]"
+  if (flightText) {
+    const arrMatch = String(flightText).match(/(?:likely\s+arrival\s+airport|arrival\s+airport|destination)[:\s]+([^,\n.(]+)/i)
+    if (arrMatch) {
+      const cleaned = cleanLocation(arrMatch[1])
+      if (cleaned && cleaned.length > 2 && cleaned.length < 35 && (!origin || cleaned.toLowerCase() !== origin) && !/destination|dishes|transit|food/i.test(cleaned)) {
+        return cleaned
+      }
+    }
+  }
+
+  // From answer/itinerary: "Trip to [Destination]"
+  if (answerText) {
+    const headMatch = String(answerText).match(/(?:trip\s+to|itinerary\s+for|welcome\s+to|destination:)\s+([A-Za-z\s,-]{2,35})/i)
+    if (headMatch) {
+      const cleaned = cleanLocation(headMatch[1])
+      if (cleaned && cleaned.length > 2 && cleaned.length < 35 && (!origin || cleaned.toLowerCase() !== origin) && !/destination|dishes|transit|food/i.test(cleaned)) {
+        return cleaned
+      }
+    }
+  }
+
+  return 'Paris'
 }
 
 function extractOrigin(queryText, flightText) {
   if (queryText) {
-    const m = String(queryText).match(/(?:^|\s)from\s+([A-Za-z\s,-]{2,30}?)(?=\s+(?:to\b|in\b|for\b|with\b|on\b|departing\b|under\b|budget\b|\.|\,|$))/i)
+    const m = String(queryText).match(
+      /\b(?:from|departing\s+from|departing|leaving\s+from|leaving|out\s+of|origin[:\s]+)\s+([A-Za-z\s,-]{2,30}?)(?=[.,;!?]|\s+(?:to\b|in\b|for\b|with\b|on\b|during\b|departing\b|under\b|budget\b|find\b|flights?\b|hotels?\b|weather\b|and\b|$)|$)/i
+    )
     if (m) {
       const cleaned = cleanLocation(m[1])
-      if (cleaned && cleaned.length > 2 && !/destination|airport\s+to/i.test(cleaned)) return cleaned
+      if (cleaned && cleaned.length >= 2 && !/^(?:chaos|scratch|home|now|here|me|there|airport|centre|center)$/i.test(cleaned)) {
+        return cleaned
+      }
     }
   }
 
@@ -234,7 +313,7 @@ export default function PlanResult({ result, onFollowup, onToast }) {
   const weatherText = result.weather_results || extractSectionText(result.answer, 'Weather')
 
   // Clean Extracted Trip Details
-  const dest = extractDestination(queryText, flightText, result.answer)
+  const dest = extractDestination(queryText, flightText, result.answer, result.destination)
   const origin = extractOrigin(queryText, flightText)
   const durationStr = extractDuration(queryText, itineraryText)
   const initialTravellers = extractTravellers(queryText)
@@ -265,20 +344,19 @@ export default function PlanResult({ result, onFollowup, onToast }) {
     }
   }
 
-  const handleDownloadMarkdown = () => {
-    const blob = new Blob([plainTextOf(result)], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `roamly-${dest.toLowerCase().replace(/[^a-z0-9]/g, '-')}-plan.md`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-  }
+  const [isGuideOpen, setIsGuideOpen] = useState(false)
+  const [isFxOpen, setIsFxOpen] = useState(false)
 
   const handlePrint = () => {
+    const originalTitle = document.title
+    const safeDest = (dest || 'Travel').trim().replace(/[^a-zA-Z0-9\s]/g, '')
+    const safeDuration = (durationStr || '').trim().replace(/[^a-zA-Z0-9\s]/g, '')
+    const autoDocTitle = `${safeDest}${safeDuration ? ' - ' + safeDuration : ''} - Roamly Travel Dossier`
+    document.title = autoDocTitle
     window.print()
+    setTimeout(() => {
+      document.title = originalTitle
+    }, 1500)
   }
 
   return (
@@ -298,17 +376,43 @@ export default function PlanResult({ result, onFollowup, onToast }) {
           </div>
 
           <div className="card-tools">
-            <button className="icon-btn sm" type="button" title="Copy plan" onClick={handleCopy}>
+            <button
+              className="btn btn-soft btn-sm card-tool-pill"
+              type="button"
+              title="Destination Culture, Emergency Contacts & Audio Phrases"
+              onClick={() => setIsGuideOpen(true)}
+            >
+              <span className="card-tool-emoji">🌐</span>
+              <span className="card-tool-text">Travel Guide</span>
+            </button>
+
+            <button
+              className="btn btn-soft btn-sm card-tool-pill"
+              type="button"
+              title="Live Currency Converter & Dining Tip Calculator"
+              onClick={() => setIsFxOpen(true)}
+            >
+              <span className="card-tool-emoji">💱</span>
+              <span className="card-tool-text">Currency & Tips</span>
+            </button>
+
+            <button
+              className="btn btn-soft btn-sm card-tool-pill"
+              type="button"
+              title="Jump to Smart Packing & Luggage Checklist"
+              onClick={() => scrollToSection('packing-section')}
+            >
+              <span className="card-tool-emoji">🧳</span>
+              <span className="card-tool-text">Packing</span>
+            </button>
+
+            <button className="icon-btn sm" type="button" title="Copy itinerary markdown to clipboard" onClick={handleCopy}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M8 4h10a2 2 0 0 1 2 2v10M16 8H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2Z" />
               </svg>
             </button>
-            <button className="icon-btn sm" type="button" title="Download as Markdown" onClick={handleDownloadMarkdown}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-              </svg>
-            </button>
-            <button className="icon-btn sm" type="button" title="Print" onClick={handlePrint}>
+
+            <button className="icon-btn sm" type="button" title="Print / Save as PDF (Auto-named)" onClick={handlePrint}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M6 14h12v7H6z" />
               </svg>
@@ -420,6 +524,21 @@ export default function PlanResult({ result, onFollowup, onToast }) {
           <FollowupChips dest={dest} onSelect={onFollowup} />
         </div>
       </article>
+
+      {/* Destination Culture, Emergency & Spoken Audio Guide Modal */}
+      <TravelGuideModal
+        isOpen={isGuideOpen}
+        onClose={() => setIsGuideOpen(false)}
+        dest={dest}
+        onToast={onToast}
+      />
+
+      {/* Live Currency Converter & Dining Tip Calculator Modal */}
+      <CurrencyModal
+        isOpen={isFxOpen}
+        onClose={() => setIsFxOpen(false)}
+        defaultCurrency="INR"
+      />
     </div>
   )
 }

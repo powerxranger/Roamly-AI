@@ -1,6 +1,14 @@
 import os
 from pathlib import Path
 import traceback
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent
+_env_file = BASE_DIR / ".env"
+if _env_file.is_file():
+    load_dotenv(dotenv_path=_env_file, override=False)
+load_dotenv(override=False)
+
 import uvicorn
 
 from fastapi import FastAPI, Request, Response
@@ -85,6 +93,7 @@ templates = Jinja2Templates(
 class TravelRequest(BaseModel):
     message: str
     thread_id: str | None = None
+    destination: str | None = None
 
 
 class ConfigRequest(BaseModel):
@@ -239,13 +248,15 @@ async def travel_planner(request: Request, request_data: TravelRequest):
         with use_credentials(credentials):
             result = run_travel_agent(
                 user_input=user_message,
-                thread_id=request_data.thread_id
+                thread_id=request_data.thread_id,
+                destination=request_data.destination,
             )
 
         return JSONResponse(
             content={
                 "success": True,
                 "thread_id": result["thread_id"],
+                "destination": result.get("destination", ""),
                 "answer": result["answer"],
                 "is_followup": result.get("is_followup", False),
                 "flight_results": result.get("flight_results", ""),

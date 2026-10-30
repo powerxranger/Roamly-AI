@@ -26,13 +26,21 @@ export default function Composer({
 
   const handleSubmit = (e) => {
     if (e) e.preventDefault()
-    if (busy || !isReady) return
+    if (busy) {
+      if (onToast) onToast('Plan is currently generating. Please wait until it completes.')
+      return
+    }
+    if (!isReady || !input.trim()) return
     onSubmit()
   }
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+      if (busy) {
+        if (onToast) onToast('Plan is currently generating. Please wait until it completes.')
+        return
+      }
       handleSubmit()
     }
   }
@@ -73,19 +81,24 @@ export default function Composer({
         <textarea
           ref={textareaRef}
           rows="1"
-          placeholder="Plan a 7 day trip to Tokyo from Dhaka in April, mid-range budget…"
+          placeholder={
+            busy
+              ? "Autonomous agents at work… Draft your next destination or question here"
+              : "Plan a 7 day trip to Tokyo from Dhaka in April, mid-range budget…"
+          }
           aria-label="Describe your trip"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={!isReady || busy}
+          disabled={!isReady}
         />
 
         <button
           type="submit"
           className={`btn btn-primary send-btn ${busy ? 'is-busy' : ''}`}
           disabled={!isReady || busy || !input.trim()}
-          aria-label="Plan trip"
+          aria-label={busy ? "Plan is building..." : "Plan trip"}
+          title={busy ? "Plan is building... will be ready to send once completed" : "Send prompt"}
         >
           <svg className="ico-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="m22 2-7 20-4-9-9-4 20-7Z" />

@@ -101,31 +101,72 @@ def _generate_fallback_packing(dest: str, weather_summary: str) -> str:
 
 
 def _generate_fallback_must_visit(dest: str) -> str:
+    d_lower = (dest or "").lower()
+    if any(x in d_lower for x in ["japan", "tokyo", "kyoto", "osaka"]):
+        return (
+            f"### Must-Visit & Local Picks\n\n"
+            f"- Top Attractions: Fushimi Inari Taisha (Kyoto), Senso-ji Temple & Shibuya Sky (Tokyo), Arashiyama Bamboo Forest, Dotonbori Canal (Osaka)\n"
+            f"- Hidden Gems: Yanaka old-town district (Tokyo), Omoide Yokocho lantern-lit alley, Uji green tea fields, Gion Shirakawa quiet canals\n"
+            f"- Local Food & Drinks: Fresh Tsukiji sushi & sashimi, authentic Tonkotsu ramen, hot takoyaki, savory okonomiyaki, matcha sweets & Japanese draft beer\n"
+            f"- Local Experience Tips: Visit major shrines at sunrise to enjoy serenity; get an IC card (Suica/Pasmo) for instant tap-and-go travel on all subways and trains\n"
+        )
+    if any(x in d_lower for x in ["italy", "rome", "florence", "venice", "milan"]):
+        return (
+            f"### Must-Visit & Local Picks\n\n"
+            f"- Top Attractions: The Colosseum & Roman Forum, Vatican Museums & St. Peter's, Florence Duomo & Uffizi, Venice Grand Canal\n"
+            f"- Hidden Gems: Trastevere cobblestone backstreets, Oltrarno artisan leather workshops, Cannaregio quiet wine bars in Venice\n"
+            f"- Local Food & Drinks: Cacio e Pepe, Neapolitan wood-fired pizza, Bistecca alla Fiorentina, artisanal pistachio gelato, Aperol Spritz\n"
+            f"- Local Experience Tips: Book Colosseum and Vatican skip-the-line tickets weeks early; enjoy early evening aperitivo with complimentary appetizers\n"
+        )
     return (
         f"### Must-Visit & Local Picks\n\n"
-        f"- Top Attractions: Iconic landmarks, historic city center, panoramic hill view points & national monuments in {dest}\n"
-        f"- Hidden Gems: Authentic neighborhood bazaars, quiet cultural courtyards & scenic mountain/river valleys\n"
-        f"- Local Food & Drinks: Signature regional dishes, grilled meats, freshly baked flatbreads & traditional teas\n"
-        f"- Local Experience Tips: Explore the central bazaar in the early morning for the freshest produce and fewest crowds\n"
+        f"- Top Attractions: Iconic heritage landmarks, historic old town district, panoramic viewpoint lookouts & national monuments in {dest}\n"
+        f"- Hidden Gems: Atmospheric neighborhood side streets, quiet cultural courtyards & scenic waterfront or garden walks\n"
+        f"- Local Food & Drinks: Celebrated regional specialties, fresh local market delicacies, artisan bakeries & signature beverages\n"
+        f"- Local Experience Tips: Explore the central market in the morning for fresh seasonal produce and authentic local encounters\n"
     )
 
 
 def _generate_fallback_essentials(dest: str) -> str:
+    d_lower = (dest or "").lower()
+    if any(x in d_lower for x in ["japan", "tokyo", "kyoto", "osaka"]):
+        return (
+            f"### Travel Essentials\n\n"
+            f"- Visa & Entry: Apply for Japan Tourist eVisa (or 90-day visa waiver depending on passport); passport must be valid for stay duration\n"
+            f"- Currency & Payments: Japanese Yen (JPY); cards widely accepted in department stores, but carry ¥10,000–¥20,000 cash for temples, shrines & ramen ticket machines\n"
+            f"- Timezone: Japan Standard Time (JST, UTC+9)\n"
+            f"- Electrical: 100V, 50/60Hz, Type A and Type B plugs (two flat parallel pins; carry a flat-pin universal travel adapter)\n"
+            f"- Connectivity: Buy an airport eSIM (Airalo or Ubigi) or rent a pocket Wi-Fi router upon arrival at Haneda/Narita\n"
+            f"- Local Transport Tips: Buy a digital Suica/Pasmo card on Apple/Google Wallet for all subways, buses, and 7-Eleven vending; use Shinkansen for intercity travel\n"
+            f"- Safety & Emergency: Exceptionally safe country; emergency numbers: 110 for Police, 119 for Ambulance and Fire\n"
+        )
+    if any(x in d_lower for x in ["italy", "rome", "florence", "venice", "milan"]):
+        return (
+            f"### Travel Essentials\n\n"
+            f"- Visa & Entry: Schengen Visa required for non-EU travelers; passport must be valid for at least 3 months beyond departure date\n"
+            f"- Currency & Payments: Euro (€); credit cards widely accepted; keep €30–€50 cash for small cafes and gelato\n"
+            f"- Timezone: Central European Time (CET, UTC+1 / CEST, UTC+2 in summer)\n"
+            f"- Electrical: 230V, 50Hz, European Type C, F, and L plugs\n"
+            f"- Connectivity: Affordable local tourist SIM or regional EU eSIM gives seamless coverage across all member countries\n"
+            f"- Local Transport Tips: Book Frecciarossa high-speed trains early for 50%+ discounts; always validate paper bus/tram tickets before boarding\n"
+            f"- Safety & Emergency: Watch personal belongings in crowded metro stations and tourist plazas; call 112 for all EU emergency services\n"
+        )
     return (
         f"### Travel Essentials\n\n"
-        f"- Visa & Entry: Check electronic visa / visa-free eligibility; ensure passport has at least 6 months validity\n"
-        f"- Currency & Payments: Local currency & major cards; carry small cash denominations for street stalls & taxis\n"
-        f"- Timezone & Timing: Check UTC offset; morning hours (9am - 1pm) are ideal for monuments and parks\n"
-        f"- Electrical: Standard 220V European Type C / F plug sockets\n"
-        f"- Connectivity: Buy an airport tourist eSIM / SIM card (Airalo or local telecom) for uninterrupted navigation\n"
-        f"- Local Transport Tips: Use official ride-hailing apps (like Yandex / Uber) or local metro for honest pricing\n"
-        f"- Safety & Emergency: Keep emergency contact numbers handy; store digital copies of passports securely on phone\n"
+        f"- Visa & Entry: Check electronic visa or visa-on-arrival eligibility; ensure passport has at least 6 months validity\n"
+        f"- Currency & Payments: Local currency & major cards; carry small cash denominations for local stalls & taxis\n"
+        f"- Timezone & Timing: Check destination local UTC offset; morning hours are best for popular monuments\n"
+        f"- Electrical: Check plug type and carry a universal travel adapter\n"
+        f"- Connectivity: Buy an airport tourist eSIM or local SIM card for navigation and translation\n"
+        f"- Local Transport Tips: Use official ride-hailing apps or local metro systems with clear metered fares\n"
+        f"- Safety & Emergency: Store digital copies of passport and travel insurance on your phone; note local emergency numbers\n"
     )
 
 
 def extras_agent(state: TravelState):
+    from src.agents.destination import extract_destination
     user_query = state.get("user_query", "")
-    dest = state.get("destination") or "Destination"
+    dest = state.get("destination") or extract_destination(user_query) or "Destination"
     weather = state.get("weather_results", "")
 
     # Token-efficient truncated context (prevents 4,000-token prompt bloat)

@@ -47,30 +47,37 @@ export default function AgentPipeline() {
   }, [])
 
   const ratio = Math.min(elapsed / ESTIMATED_MS, 0.97)
-  const pct = Math.round(ratio * 100)
-  const seconds = Math.floor(elapsed / 1000)
 
   let activeIdx = Math.floor(ratio * AGENT_STEPS.length)
   if (activeIdx >= AGENT_STEPS.length) activeIdx = AGENT_STEPS.length - 1
   if (activeIdx < 0) activeIdx = 0
+
+  const currentStep = AGENT_STEPS[activeIdx]
 
   return (
     <div className="msg msg-assistant">
       <article className="card agent-stepper-card">
         <div className="agent-stepper-head">
           <div className="agent-stepper-title">
-            <strong>Agents at work</strong>
-            <small>Running the LangGraph pipeline step by step</small>
+            <strong>Autonomous Agents at Work</strong>
+            <small>Researching flights, boutique stays, climate & day-by-day itineraries</small>
           </div>
-          <span className="progress-meta">
-            <b>{pct}%</b>
-            <span className="progress-sep">·</span>
-            <span>{seconds}s</span>
-          </span>
+          <div className="pipeline-telemetry">
+            <span className="pipeline-phase-pill">
+              Phase {activeIdx + 1} of {AGENT_STEPS.length}
+            </span>
+            <span className="pipeline-agent-live">
+              <span className="pipeline-live-dot"></span>
+              {currentStep.label}
+            </span>
+          </div>
         </div>
 
         <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${(ratio * 100).toFixed(1)}%` }}></div>
+          <div
+            className="progress-fill shimmer-fill"
+            style={{ width: `${Math.min(96, Math.max(12, ((activeIdx + 0.65) / AGENT_STEPS.length) * 100))}%` }}
+          ></div>
         </div>
 
         <div className="agent-stepper-list">

@@ -15,6 +15,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
+import os
+
 from src.config import settings
 
 
@@ -63,11 +65,47 @@ def use_credentials(credentials: Credentials | None):
 # =========================
 
 def resolve_groq_api_key() -> str | None:
-    return get_credentials().groq_api_key or settings.GROQ_API_KEY
+    session_key = get_credentials().groq_api_key
+    if session_key:
+        return session_key
+
+    env_key = os.getenv("GROQ_API_KEY")
+    if env_key:
+        return env_key
+
+    if settings.GROQ_API_KEY:
+        return settings.GROQ_API_KEY
+
+    # Dynamic fallback: check project root .env if missing
+    try:
+        env_file = settings.PROJECT_DIR / ".env"
+        if env_file.is_file():
+            from dotenv import dotenv_values
+            vals = dotenv_values(env_file)
+            if vals.get("GROQ_API_KEY"):
+                val = vals["GROQ_API_KEY"].strip()
+                os.environ["GROQ_API_KEY"] = val
+                return val
+    except Exception:
+        pass
+
+    return None
 
 
 def resolve_database_url() -> str | None:
-    url = get_credentials().database_url or settings.DATABASE_URL
+    url = get_credentials().database_url or os.getenv("DATABASE_URL") or settings.DATABASE_URL
+
+    if not url:
+        try:
+            env_file = settings.PROJECT_DIR / ".env"
+            if env_file.is_file():
+                from dotenv import dotenv_values
+                vals = dotenv_values(env_file)
+                if vals.get("DATABASE_URL"):
+                    url = vals["DATABASE_URL"].strip()
+                    os.environ["DATABASE_URL"] = url
+        except Exception:
+            pass
 
     return settings.normalize_database_url(url) if url else None
 
@@ -111,16 +149,18 @@ def credential_status() -> dict:
     """
 
     session = get_credentials()
+    groq_resolved = resolve_groq_api_key()
+    db_resolved = resolve_database_url()
 
     sources = {
         "GROQ_API_KEY": (
             "session" if session.groq_api_key
-            else "env" if settings.GROQ_API_KEY
+            else "env" if groq_resolved
             else None
         ),
         "DATABASE_URL": (
             "session" if session.database_url
-            else "env" if settings.DATABASE_URL
+            else "env" if db_resolved
             else None
         ),
     }
@@ -128,8 +168,8 @@ def credential_status() -> dict:
     credentials = {
         name: {
             **CREDENTIAL_LABELS[name],
-            "configured": source is not None,
-            "source": source,
+            "configured": sources[name] is not None,
+            "source": sources[name],
         }
         for name, source in sources.items()
     }

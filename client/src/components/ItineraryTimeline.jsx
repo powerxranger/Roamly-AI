@@ -26,10 +26,10 @@ export default function ItineraryTimeline({ itineraryText }) {
     const bodyText = lines.slice(1).join('\n').trim()
 
     const sections = [
-      { key: 'morning', title: 'Morning' },
-      { key: 'afternoon', title: 'Afternoon' },
-      { key: 'evening', title: 'Evening' },
-      { key: 'night', title: 'Night' },
+      { key: 'morning', title: 'Morning', icon: '☀️' },
+      { key: 'afternoon', title: 'Afternoon', icon: '🌤️' },
+      { key: 'evening', title: 'Evening', icon: '🌆' },
+      { key: 'night', title: 'Night', icon: '🌙' },
     ]
 
     const blocks = []
@@ -41,13 +41,13 @@ export default function ItineraryTimeline({ itineraryText }) {
       const m = re.exec(bodyText)
       if (m && m[2]) {
         const t = m[2].replace(/\n{3,}/g, '\n\n').trim()
-        if (t) blocks.push({ title: sec.title, text: t })
+        if (t) blocks.push({ title: `${sec.icon} ${sec.title}`, text: t })
       }
     })
 
     if (blocks.length === 0 && bodyText) {
       blocks.push({
-        title: 'Plan for the day',
+        title: '📍 Daily Schedule & Highlights',
         text: bodyText.replace(/^\s*[-*]\s*/gm, '- ').trim(),
       })
     }
@@ -65,20 +65,51 @@ export default function ItineraryTimeline({ itineraryText }) {
 
   const [activeFilter, setActiveFilter] = useState('all')
   const [bookmarkedDays, setBookmarkedDays] = useState({})
+  const [collapsedDays, setCollapsedDays] = useState({})
 
-  const toggleBookmark = (idx) => {
+  const toggleBookmark = (e, idx) => {
+    e.stopPropagation()
     setBookmarkedDays((prev) => ({
       ...prev,
       [idx]: !prev[idx],
     }))
   }
 
+  const toggleCollapse = (idx) => {
+    setCollapsedDays((prev) => ({
+      ...prev,
+      [idx]: !prev[idx],
+    }))
+  }
+
+  const toggleAllCollapse = () => {
+    const anyExpanded = daysData.some((d) => !collapsedDays[d.idx])
+    if (anyExpanded) {
+      const allCollapsed = {}
+      daysData.forEach((d) => { allCollapsed[d.idx] = true })
+      setCollapsedDays(allCollapsed)
+    } else {
+      setCollapsedDays({})
+    }
+  }
+
+  const isAnyExpanded = daysData.some((d) => !collapsedDays[d.idx])
+
   return (
     <div className="itinerary-timeline-wrap">
       <div className="itinerary-timeline-head">
         <div className="itinerary-timeline-title">
           <strong>Day by Day Timeline</strong>
-          <small>Clean view of your itinerary at a glance • Click days to filter</small>
+          <small>Interactive daily breakdown • Click headers to expand or collapse</small>
+        </div>
+        <div className="itinerary-head-actions">
+          <button
+            type="button"
+            className="btn btn-soft btn-sm itinerary-expand-btn"
+            onClick={toggleAllCollapse}
+          >
+            {isAnyExpanded ? 'Collapse All' : 'Expand All'}
+          </button>
         </div>
       </div>
 
@@ -98,6 +129,7 @@ export default function ItineraryTimeline({ itineraryText }) {
             onClick={() => setActiveFilter(d.idx)}
           >
             {d.shortDay}
+            {bookmarkedDays[d.idx] && ' ⭐'}
           </button>
         ))}
       </div>
@@ -106,6 +138,7 @@ export default function ItineraryTimeline({ itineraryText }) {
         {daysData.map((d) => {
           if (activeFilter !== 'all' && activeFilter !== d.idx) return null
           const isSaved = !!bookmarkedDays[d.idx]
+          const isCollapsed = !!collapsedDays[d.idx]
 
           return (
             <div key={d.idx} className="itinerary-timeline-item">
@@ -115,41 +148,54 @@ export default function ItineraryTimeline({ itineraryText }) {
                 </svg>
               </div>
 
-              <article className={`itinerary-timeline-card ${isSaved ? 'saved-day' : ''}`}>
-                <div className="itinerary-timeline-card-head">
+              <article className={`itinerary-timeline-card ${isSaved ? 'saved-day' : ''} ${isCollapsed ? 'is-collapsed' : ''}`}>
+                <div
+                  className="itinerary-timeline-card-head"
+                  onClick={() => toggleCollapse(d.idx)}
+                  role="button"
+                  tabIndex={0}
+                  title="Click to expand or collapse this day"
+                >
                   <div className="itinerary-timeline-day">
                     <span
                       className="itinerary-timeline-day-label"
                       dangerouslySetInnerHTML={{ __html: inline(d.dayLabel) }}
                     />
                     <span className="itinerary-timeline-day-title">Itinerary</span>
-                    <span className="itinerary-timeline-day-sub">Suggested plan for this day</span>
+                    <span className="itinerary-timeline-day-sub">
+                      {d.blocks.length} scheduled {d.blocks.length === 1 ? 'part' : 'parts'} • Click to {isCollapsed ? 'expand' : 'collapse'}
+                    </span>
                   </div>
 
-                  <button
-                    type="button"
-                    className={`day-bookmark-btn ${isSaved ? 'bookmarked' : ''}`}
-                    title="Save or highlight this day"
-                    onClick={() => toggleBookmark(d.idx)}
-                  >
-                    ⭐
-                  </button>
+                  <div className="itinerary-card-actions">
+                    <button
+                      type="button"
+                      className={`day-bookmark-btn ${isSaved ? 'bookmarked' : ''}`}
+                      title={isSaved ? 'Saved as favorite day' : 'Save as favorite day'}
+                      onClick={(e) => toggleBookmark(e, d.idx)}
+                    >
+                      {isSaved ? '⭐' : '☆'}
+                    </button>
+                    <span className="day-chevron">{isCollapsed ? '▼' : '▲'}</span>
+                  </div>
                 </div>
 
-                <div className="itinerary-timeline-card-body">
-                  {d.blocks.map((b, bIdx) => (
-                    <div key={bIdx} className="itinerary-timeline-block">
-                      <div className="itinerary-timeline-block-head">
-                        <span className="itinerary-timeline-block-dot"></span>
-                        <span className="itinerary-timeline-block-title">{b.title}</span>
+                {!isCollapsed && (
+                  <div className="itinerary-timeline-card-body">
+                    {d.blocks.map((b, bIdx) => (
+                      <div key={bIdx} className="itinerary-timeline-block">
+                        <div className="itinerary-timeline-block-head">
+                          <span className="itinerary-timeline-block-dot"></span>
+                          <span className="itinerary-timeline-block-title">{b.title}</span>
+                        </div>
+                        <div
+                          className="itinerary-timeline-block-text"
+                          dangerouslySetInnerHTML={{ __html: renderMarkdown(b.text) }}
+                        />
                       </div>
-                      <div
-                        className="itinerary-timeline-block-text"
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(b.text) }}
-                      />
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </article>
             </div>
           )

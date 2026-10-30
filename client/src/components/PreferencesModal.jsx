@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 export default function PreferencesModal({
   isOpen,
@@ -15,11 +16,18 @@ export default function PreferencesModal({
   onOpenDevSettings,
 }) {
   useEffect(() => {
+    if (!isOpen) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) onClose()
+      if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
   }, [isOpen, onClose])
 
   if (!isOpen) return null
@@ -39,16 +47,24 @@ export default function PreferencesModal({
   ]
 
   const ACCENTS = [
-    { id: 'emerald', name: 'Emerald', color: '#0d9488' },
-    { id: 'cyan', name: 'Sky Cyan', color: '#0284c7' },
-    { id: 'indigo', name: 'Royal Indigo', color: '#6366f1' },
-    { id: 'amber', name: 'Warm Amber', color: '#d97706' },
+    { id: 'iris', name: 'Electric Iris (Linear & Stripe)', color: '#6366f1', emoji: '⚡' },
+    { id: 'sunset', name: 'Sunset Coral (Airbnb & Arc)', color: '#ff385c', emoji: '🌅' },
+    { id: 'azure', name: 'Cosmic Azure (Apple & Raycast)', color: '#0284c7', emoji: '💎' },
+    { id: 'emerald', name: 'Lush Emerald (Mint & Aurora)', color: '#10b981', emoji: '🌿' },
+    { id: 'amethyst', name: 'Royal Amethyst (Cyberpunk)', color: '#9333ea', emoji: '🔮' },
+    { id: 'amber', name: 'Horizon Gold (Warm Sun)', color: '#f59e0b', emoji: '☀️' },
   ]
 
-  return (
-    <>
-      <div className="modal-scrim" onClick={onClose}></div>
-      <div className="modal preferences-modal" role="dialog" aria-modal="true" aria-labelledby="prefTitle">
+  return createPortal(
+    <div className="modal-portal-wrapper">
+      <div className="modal-scrim" onClick={onClose} />
+      <div
+        className="modal preferences-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="prefTitle"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-head">
           <div className="modal-heading">
             <h2 id="prefTitle">Trip Customizer & Preferences</h2>
@@ -156,6 +172,7 @@ export default function PreferencesModal({
           </button>
         </div>
       </div>
-    </>
+    </div>,
+    document.body
   )
 }

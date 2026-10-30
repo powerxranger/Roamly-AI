@@ -95,11 +95,11 @@ export async function resetConfig() {
   })
 }
 
-export async function planTravel(message, threadId = null) {
+export async function planTravel(message, threadId = null, destination = null) {
   return requestWithFallback("/api/travel", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, thread_id: threadId }),
+    body: JSON.stringify({ message, thread_id: threadId, destination }),
   })
 }
 

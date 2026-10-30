@@ -38,11 +38,10 @@ def build_graph() -> StateGraph:
     return graph
 
 
-@lru_cache(maxsize=4)
-def _compiled_graph(database_url: str):
-    return build_graph().compile(checkpointer=get_checkpointer(database_url or None))
+def get_travel_graph(checkpointer=None):
+    if checkpointer is not None:
+        return build_graph().compile(checkpointer=checkpointer)
 
-
-def get_travel_graph():
     url = resolve_database_url()
-    return _compiled_graph(url or "")
+    cp = get_checkpointer(url or None)
+    return build_graph().compile(checkpointer=cp)

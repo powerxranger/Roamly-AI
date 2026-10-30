@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { renderMarkdown } from '../utils/markdown'
 
 const RATES = {
@@ -18,11 +18,135 @@ const SYMBOLS = {
 }
 
 const SEGMENTS = [
-  { name: 'Flights', pct: 35, color: '#0d9488', icon: '✈️' },
+  { name: 'Flights', pct: 35, color: '#6366f1', icon: '✈️' },
   { name: 'Stay', pct: 35, color: '#0284c7', icon: '🏨' },
   { name: 'Food', pct: 18, color: '#f59e0b', icon: '🍜' },
-  { name: 'Activities', pct: 12, color: '#8b5cf6', icon: '🎟️' },
+  { name: 'Activities', pct: 12, color: '#10b981', icon: '🎟️' },
 ]
+
+function formatNumber(n, c) {
+  if (c === 'INR') return n.toLocaleString('en-IN')
+  return n.toLocaleString('en-US')
+}
+
+function formatConvertedNumber(val, curr) {
+  if (val >= 1) {
+    const rounded = Math.round(val)
+    if (curr === 'INR') return rounded.toLocaleString('en-IN')
+    return rounded.toLocaleString('en-US')
+  }
+  if (val > 0) return val.toFixed(2)
+  return '0'
+}
+
+function getCurrencyFromToken(tok, fallback) {
+  if (!tok) return fallback
+  const t = tok.trim()
+  if (t === '₹' || /^Rs\.?$/i.test(t) || /^INR$/i.test(t)) return 'INR'
+  if (t === '$' || /^USD$/i.test(t)) return 'USD'
+  if (t === '€' || /^EUR$/i.test(t)) return 'EUR'
+  if (t === '£' || /^GBP$/i.test(t)) return 'GBP'
+  if (t === '¥' || /^JPY$/i.test(t)) return 'JPY'
+  return fallback
+}
+
+export function transformBudgetText(rawText, detectedCurr, targetCurr) {
+  if (!rawText) return ''
+  const baseCurr = detectedCurr || 'INR'
+  const toCurr = targetCurr || 'INR'
+  if (baseCurr === toCurr) return rawText
+
+  const tokens = []
+  const saveToken = (str) => {
+    const id = `__ROAMLY_CURR_TOKEN_${tokens.length}__`
+    tokens.push(str)
+    return id
+  }
+
+  let out = String(rawText)
+
+  // 1. Dual currency mentions e.g. (¥800 / ₹450) or ¥1,500 / ₹830 or ₹45,000 / $550
+  out = out.replace(
+    /(?:[([]\s*)?([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)\s*(?:\/|\s+(?:or|approx\.?|about|~)\s+)\s*([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)(?:\s*[)\]])?/gi,
+    (match, sym1, num1, sym2, num2) => {
+      const c1 = getCurrencyFromToken(sym1, baseCurr)
+      const c2 = getCurrencyFromToken(sym2, baseCurr)
+      const v1 = parseFloat(num1.replace(/,/g, ''))
+      const v2 = parseFloat(num2.replace(/,/g, ''))
+      let converted
+      if (c1 === toCurr) converted = v1
+      else if (c2 === toCurr) converted = v2
+      else converted = v1 * ((RATES[toCurr] || 1) / (RATES[c1] || 1))
+      return saveToken(`${SYMBOLS[toCurr]}${formatConvertedNumber(converted, toCurr)}`)
+    }
+  )
+
+  // 2. Lakhs / Lacs notation: e.g. 1.5 Lakh, 2.5 Lakhs, ₹15 Lacs
+  out = out.replace(
+    /(?:([₹$€£¥]|Rs\.?|INR)\s*)?(\d+(?:\.\d+)?)\s*(?:lakhs?|lacs?)\b/gi,
+    (match, sym, numStr) => {
+      const valInInr = parseFloat(numStr) * 100000
+      const ratio = (RATES[toCurr] || 1) / (RATES['INR'] || 1)
+      return saveToken(`${SYMBOLS[toCurr]}${formatConvertedNumber(valInInr * ratio, toCurr)}`)
+    }
+  )
+
+  // 3. Number Ranges: e.g. ₹45,000 – ₹55,000, ₹45,000 - 55,000, $500 - $700
+  out = out.replace(
+    /([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)\s*(?:–|—|-|to|\band\b)\s*([₹$€£¥]|Rs\.?|INR)?\s*([\d,]+(?:\.\d+)?)/gi,
+    (match, sym1, num1, sym2, num2) => {
+      const src1 = getCurrencyFromToken(sym1, baseCurr)
+      const src2 = sym2 ? getCurrencyFromToken(sym2, src1) : src1
+      const v1 = parseFloat(num1.replace(/,/g, ''))
+      const v2 = parseFloat(num2.replace(/,/g, ''))
+      if (isNaN(v1) || isNaN(v2)) return match
+      const c1 = v1 * ((RATES[toCurr] || 1) / (RATES[src1] || 1))
+      const c2 = v2 * ((RATES[toCurr] || 1) / (RATES[src2] || 1))
+      return saveToken(
+        `${SYMBOLS[toCurr]}${formatConvertedNumber(c1, toCurr)} – ${SYMBOLS[toCurr]}${formatConvertedNumber(c2, toCurr)}`
+      )
+    }
+  )
+
+  // 4. Single amounts with currency symbol or code prefix: e.g. ₹45,000, $500
+  out = out.replace(
+    /([₹$€£¥]|Rs\.?|INR)\s*([\d,]+(?:\.\d+)?)/gi,
+    (match, sym, numStr) => {
+      const src = getCurrencyFromToken(sym, baseCurr)
+      const v = parseFloat(numStr.replace(/,/g, ''))
+      if (isNaN(v)) return match
+      const c = v * ((RATES[toCurr] || 1) / (RATES[src] || 1))
+      return saveToken(`${SYMBOLS[toCurr]}${formatConvertedNumber(c, toCurr)}`)
+    }
+  )
+
+  // 5. Trailing currency notation (e.g. 45,000 INR, 45,000/-, 45000 Rs)
+  out = out.replace(
+    /([\d,]+(?:\.\d+)?)\s*(?:-\/|\/-\s*(?:INR)?|\b(?:INR|Rs\.?)\b)/gi,
+    (match, numStr) => {
+      const v = parseFloat(numStr.replace(/,/g, ''))
+      if (isNaN(v)) return match
+      const c = v * ((RATES[toCurr] || 1) / (RATES['INR'] || 1))
+      return saveToken(`${SYMBOLS[toCurr]}${formatConvertedNumber(c, toCurr)}`)
+    }
+  )
+
+  // 6. Currency labels and phrases
+  out = out
+    .replace(/\b(?:in\s+)?Indian\s+Rupees\s*(?:\(INR\))?/gi, `in ${toCurr} (${SYMBOLS[toCurr]})`)
+    .replace(/\b(?:in\s+)?Rupees\b/gi, `in ${toCurr}`)
+    .replace(/\b(?:in\s+)?INR\b/gi, `${toCurr}`)
+    .replace(/\bCurrency:\s*(?:INR|USD|EUR|GBP|JPY)\b/gi, `Currency: ${toCurr}`)
+    .replace(/\b(?:All\s+prices|Prices|Estimated\s+Cost|Cost)\s+in\s+[₹$€£¥]/gi, `Prices in ${SYMBOLS[toCurr]}`)
+    .replace(/\([₹$€£¥]\)/g, `(${SYMBOLS[toCurr]})`)
+
+  // 7. Restore tokens
+  tokens.forEach((val, idx) => {
+    out = out.replace(`__ROAMLY_CURR_TOKEN_${idx}__`, val)
+  })
+
+  return out
+}
 
 export default function BudgetCalculator({ content, travellersCount = 2 }) {
   const text = String(content || '').trim()
@@ -65,13 +189,18 @@ export default function BudgetCalculator({ content, travellersCount = 2 }) {
     }
   }, [travellersCount])
 
-  const formatNumber = (n, c) => {
-    if (c === 'INR') return n.toLocaleString('en-IN')
-    return n.toLocaleString('en-US')
-  }
+  useEffect(() => {
+    if (detectedCurr) {
+      setCurr(detectedCurr)
+    }
+  }, [detectedCurr])
 
   const convertedTotal = Math.round(baseUsd * RATES[curr])
   const perPerson = Math.round(convertedTotal / people)
+
+  const displayedText = useMemo(() => {
+    return transformBudgetText(text, detectedCurr, curr)
+  }, [text, detectedCurr, curr])
 
   return (
     <div className="extra-card">
@@ -169,8 +298,8 @@ export default function BudgetCalculator({ content, travellersCount = 2 }) {
           </div>
         </div>
 
-        {text ? (
-          <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+        {displayedText ? (
+          <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(displayedText) }} />
         ) : (
           <div className="md">
             <div className="md-empty">
