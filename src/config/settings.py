@@ -81,7 +81,7 @@ CACHE_ENABLED = (
 # whole life of the process.
 CACHE_RECONNECT_SECONDS = int(os.getenv("CACHE_RECONNECT_SECONDS", "60"))
 
-CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "travelbrain")
+CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "roamly")
 
 # TTLs in seconds, chosen to match how fast each source actually changes.
 CACHE_TTL_AIRPORTS = int(os.getenv("CACHE_TTL_AIRPORTS", str(7 * 24 * 3600)))

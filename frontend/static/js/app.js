@@ -39,7 +39,7 @@
 
   /* ---------------- state ---------------- */
 
-  var THEME_KEY = "travelbrain.theme";
+  var THEME_KEY = "roamly.theme";
 
   var threadId = null;   // LangGraph conversation thread for the current trip
   var activeDestination = null; // Active itinerary destination for subsequent follow-ups

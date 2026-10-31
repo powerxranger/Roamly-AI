@@ -1986,7 +1986,7 @@ wheels = [
 ]
 
 [[package]]
-name = "travelbrain-ai"
+name = "roamly-ai"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [

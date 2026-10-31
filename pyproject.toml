@@ -1,5 +1,5 @@
 [project]
-name = "travelbrain-ai"
+name = "roamly-ai"
 version = "1.0.0"
 description = "Autonomous Multi-Agent AI Travel Planner powered by LangGraph, FastAPI, and Groq"
 readme = "README.md"

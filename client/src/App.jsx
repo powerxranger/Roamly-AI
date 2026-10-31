@@ -16,10 +16,10 @@ import { fetchConfig, planTravel } from './services/api'
 import { getAuthUser } from './utils/auth'
 import { getTripHistory, saveTripToHistory, clearGuestTripHistory } from './utils/historyStorage'
 
-const THEME_KEY = 'travelbrain.theme'
-const ACCENT_KEY = 'travelbrain.accent'
-const CURRENCY_KEY = 'travelbrain.currency'
-const PACE_KEY = 'travelbrain.pace'
+const THEME_KEY = 'roamly.theme'
+const ACCENT_KEY = 'roamly.accent'
+const CURRENCY_KEY = 'roamly.currency'
+const PACE_KEY = 'roamly.pace'
 
 export default function App() {
   // Theme state
